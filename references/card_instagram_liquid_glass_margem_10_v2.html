@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Instagram · Liquid Glass</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#26222b;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:transparent}
+body{display:grid;place-items:center;padding:10%}
+.scene{position:relative;width:min(100%,460px);min-height:370px;isolation:isolate}
+.card{position:absolute;inset:0;border-radius:26px;padding:22px;overflow:hidden;
+ background:linear-gradient(135deg,rgba(255,255,255,.78),rgba(255,255,255,.47) 55%,rgba(248,246,255,.63));
+ border:1px solid rgba(255,255,255,.85);
+ -webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);
+ box-shadow:0 18px 42px rgba(40,30,48,.15),inset 0 1px 1px rgba(255,255,255,.95);
+ transition:transform .52s cubic-bezier(.2,.8,.2,1),opacity .35s,visibility .35s}
+.card:before{content:"";position:absolute;inset:0 0 auto;height:38%;background:linear-gradient(rgba(255,255,255,.27),transparent);pointer-events:none}
+.front{z-index:2;opacity:1;visibility:visible;transform:translateY(0) scale(1)}
+.confirm-card{z-index:1;opacity:0;visibility:hidden;transform:translateY(18px) scale(.94);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:15px}
+.scene.asking .front{opacity:0;visibility:hidden;transform:translateY(-24px) scale(.96);pointer-events:none}
+.scene.asking .confirm-card{z-index:3;opacity:1;visibility:visible;transform:translateY(0) scale(1)}
+.top{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:750}
+.icon{width:18px;height:18px;stroke-width:2;flex-shrink:0}
+.profile{display:grid;grid-template-columns:82px 1fr;gap:15px;align-items:center;margin:21px 0 15px}
+.avatar{width:80px;height:80px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#e9005e,#71112b 55%,#ff8a1b);color:#fff;font-size:42px;font-weight:850}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;text-align:center}
+.stats b{display:block;font-size:19px}.stats span{font-size:10px;color:#68636e}
+.name{font-weight:800;font-size:18px}.bio{font-size:13px;line-height:1.5;color:#595560;margin:6px 0}
+.link{font-size:12px;color:#b72257;font-weight:750;display:flex;align-items:center;gap:5px;overflow-wrap:anywhere}
+.hint{font-size:11px;color:#98664f;margin:12px 0}
+.actions{display:flex;gap:8px;width:100%}
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;flex:1;min-width:0;min-height:45px;padding:8px 10px;border-radius:13px;cursor:pointer;font:700 13px inherit;font-family:inherit;font-size:13px;font-weight:750;color:#302a34;background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.88);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.btn.primary{background:linear-gradient(110deg,#dc166f,#f36a35);color:#fff;border-color:rgba(255,255,255,.3)}
+.btn:focus-visible{outline:3px solid #f16a4c;outline-offset:2px}
+.confirm-card .symbol{width:60px;height:60px;border-radius:19px;display:grid;place-items:center;background:rgba(255,237,230,.85);color:#d95138}
+.confirm-card .symbol .icon{width:29px;height:29px}
+.confirm-card h2{font-size:22px;margin:0}.confirm-card p{font-size:14px;line-height:1.55;color:#625d68;max-width:310px;margin:0}
+.destination{font-size:12px;font-weight:700;color:#b34b4d;overflow-wrap:anywhere}
+.confirm-card .actions{margin-top:12px}
+@media(max-width:410px){.scene{min-height:365px}.card{padding:16px}.profile{grid-template-columns:70px 1fr;gap:10px}.avatar{width:68px;height:68px;font-size:35px}.stats b{font-size:16px}.stats span{font-size:9px}.btn{font-size:12px;padding:8px 6px}}
+@media(prefers-reduced-motion:reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<div class="scene" id="instagram-card">
+<section class="card front" id="profile-card" aria-label="Perfil do Instagram">
+  <div class="top"><i data-lucide="instagram"></i><span id="handle">@diemsociety</span><i data-lucide="ellipsis"></i></div>
+  <div class="profile"><div class="avatar" id="avatar">D</div><div class="stats"><div><b id="posts">312</b><span>Posts</span></div><div><b id="followers">24,8K</b><span>Seguidores</span></div><div><b id="following">185</b><span>Seguindo</span></div></div></div>
+  <div class="name" id="profile-name">Diem Society</div>
+  <div class="bio" id="bio">Siga a gente no Instagram!<br>Novidades, combos e bastidores.</div>
+  <div class="link"><i data-lucide="link-2"></i><span id="website">instagram.com/diemsociety</span></div>
+  <div class="hint">Toque em uma ação para continuar</div>
+  <div class="actions">
+    <button type="button" class="btn primary" data-action="seguir"><i data-lucide="user-round-plus"></i>Seguir</button>
+    <button type="button" class="btn" data-action="perfil"><i data-lucide="external-link"></i>Ver perfil</button>
+    <button type="button" class="btn" style="flex:0 0 46px" data-action="mensagem" aria-label="Mensagem"><i data-lucide="send"></i></button>
+  </div>
+</section>
+<section class="card confirm-card" id="confirm-card" aria-label="Confirmação de saída" aria-hidden="true" inert>
+  <div class="symbol"><i data-lucide="external-link"></i></div>
+  <h2>Sair do cardápio?</h2>
+  <p>Deseja abrir o Instagram? Você poderá voltar ao cardápio imersivo depois.</p>
+  <div class="destination" id="destination">instagram.com/diemsociety</div>
+  <div class="actions">
+    <button type="button" class="btn" id="cancel"><i data-lucide="arrow-left"></i>Voltar</button>
+    <button type="button" class="btn primary" id="confirm"><i data-lucide="check"></i>Confirmar</button>
+  </div>
+</section>
+</div>
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+<script>
+(()=>{
+"use strict";
+const CONFIG={handle:"diemsociety",name:"Diem Society",bio:"Siga a gente no Instagram!<br>Novidades, combos e bastidores.",posts:"312",followers:"24,8K",following:"185",avatarLetter:"D",profileUrl:"https://www.instagram.com/diemsociety/"};
+const $=id=>document.getElementById(id);
+const scene=$("instagram-card"),front=$("profile-card"),back=$("confirm-card");
+const handle=CONFIG.handle.replace(/^@/,"");
+$("handle").textContent="@"+handle;$("profile-name").textContent=CONFIG.name;$("bio").innerHTML=CONFIG.bio;
+$("posts").textContent=CONFIG.posts;$("followers").textContent=CONFIG.followers;$("following").textContent=CONFIG.following;
+$("avatar").textContent=CONFIG.avatarLetter;$("website").textContent=CONFIG.profileUrl.replace(/^https?:\/\//,"");
+if(window.lucide)window.lucide.createIcons();
+let target=null;
+function setAsking(value){
+ scene.classList.toggle("asking",value);
+ front.setAttribute("aria-hidden",String(value));back.setAttribute("aria-hidden",String(!value));
+ front.inert=value;back.inert=!value;
+}
+function open(action){
+ target=action==="mensagem"?"https://www.instagram.com/direct/inbox/":CONFIG.profileUrl;
+ $("destination").textContent=target.replace(/^https?:\/\//,"");
+ setAsking(true);
+ $("cancel").focus({preventScroll:true});
+}
+function close(){target=null;setAsking(false);}
+document.querySelectorAll("[data-action]").forEach(button=>button.addEventListener("click",()=>open(button.dataset.action)));
+$("cancel").addEventListener("click",close);
+$("confirm").addEventListener("click",()=>{
+ if(!target)return;
+ const url=target;
+ window.dispatchEvent(new CustomEvent("instagram-card:external-link",{detail:{url}}));
+ window.open(url,"_blank","noopener,noreferrer");
+ close();
+});
+window.addEventListener("keydown",event=>{if(event.key==="Escape"&&scene.classList.contains("asking"))close();});
+window.InstagramFloatingCard={open,close};
+})();
+</script>
+</body>
+</html>

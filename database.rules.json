@@ -1,0 +1,89 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "modelCatalog": {
+      ".read": true,
+      ".write": "auth != null && auth.token.platformAdmin === true",
+      "$modelId": {
+        ".validate": "newData.hasChildren(['name','url','active']) && newData.child('name').isString() && newData.child('name').val().length <= 120 && newData.child('url').isString() && newData.child('url').val().length <= 2000 && newData.child('url').val().matches(/^https:\\/\\/[^ ]+\\.glb$/) && newData.child('active').isBoolean()"
+      }
+    },
+    "settings": {
+      "site": {
+        ".read": true,
+        ".write": "auth != null && auth.token.platformAdmin === true",
+        ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 60 && newData.child('headline').isString() && newData.child('headline').val().length <= 180 && newData.child('description').isString() && newData.child('description').val().length <= 600"
+      }
+    },
+    "restaurants": {
+      ".indexOn": [
+        "ownerUid"
+      ],
+      ".read": "auth != null && (auth.token.platformAdmin === true || (query.orderByChild === 'ownerUid' && query.equalTo === auth.uid))",
+      "$rid": {
+        ".read": "data.child('published').val() === true || (auth != null && (auth.token.platformAdmin === true || data.child('ownerUid').val() === auth.uid))",
+        ".write": "auth != null && (auth.token.platformAdmin === true || (newData.exists() && newData.child('ownerUid').val() === auth.uid && (!data.exists() || data.child('ownerUid').val() === auth.uid)))",
+        ".validate": "newData.hasChildren(['name','ownerUid','published']) && newData.child('ownerUid').isString() && (auth.token.platformAdmin === true || newData.child('ownerUid').val() === auth.uid) && newData.child('name').isString() && newData.child('name').val().length <= 90 && newData.child('published').isBoolean() && (!newData.child('whatsapp').exists() || newData.child('whatsapp').isString())",
+        "cover": {
+          ".validate": "newData.isString() && (newData.val() === '' || (newData.val().length <= 190000 && newData.val().matches(/^data:image\\/(webp|jpeg);base64,[A-Za-z0-9+\\/=]+$/)))"
+        },
+        "tagline": {
+          ".validate": "newData.isString() && newData.val().length <= 250"
+        },
+        "instagram": {
+          ".validate": "newData.isString() && newData.val().length <= 50"
+        },
+        "instagramName": {
+          ".validate": "newData.isString() && newData.val().length <= 90"
+        },
+        "instagramBio": {
+          ".validate": "newData.isString() && newData.val().length <= 250"
+        },
+        "whatsapp": {
+          ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^55[0-9]{10,11}$/))"
+        },
+        "products": {
+          ".indexOn": [
+            "active"
+          ],
+          ".read": "data.parent().child('published').val() === true || (auth != null && (auth.token.platformAdmin === true || data.parent().child('ownerUid').val() === auth.uid))",
+          "$pid": {
+            ".validate": "newData.hasChildren(['name','price','active']) && newData.child('name').isString() && newData.child('name').val().length <= 120 && newData.child('price').isNumber() && newData.child('price').val() >= 0 && newData.child('price').val() <= 100000 && newData.child('active').isBoolean() && (!newData.child('modelId').exists() || newData.child('modelId').val() === '' || root.child('modelCatalog').child(newData.child('modelId').val()).child('active').val() === true || auth.token.platformAdmin === true) && (auth.token.platformAdmin === true || (data.exists() ? newData.child('modelStatus').val() === data.child('modelStatus').val() : newData.child('modelStatus').val() === 'none'))",
+            "photo": {
+              ".validate": "newData.isString() && (newData.val() === '' || (newData.val().length <= 190000 && newData.val().matches(/^data:image\\/(webp|jpeg);base64,[A-Za-z0-9+\\/=]+$/)))"
+            },
+            "referencePhotos": {
+              ".validate": "newData.numChildren() <= 5",
+              "$index": {
+                ".validate": "newData.isString() && newData.val().length <= 190000 && newData.val().matches(/^data:image\\/(webp|jpeg);base64,[A-Za-z0-9+\\/=]+$/)"
+              }
+            },
+            "url": {
+              ".validate": false
+            }
+          }
+        },
+        "logo": {
+          ".validate": "newData.isString() && (newData.val() === '' || (newData.val().length <= 190000 && newData.val().matches(/^data:image\\/(webp|jpeg);base64,[A-Za-z0-9+\\/=]+$/)))"
+        },
+        "niche": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "address": {
+          ".validate": "newData.isString() && newData.val().length <= 240"
+        }
+      }
+    },
+    "modelRequests": {
+      ".indexOn": [
+        "ownerUid"
+      ],
+      ".read": "auth != null && (auth.token.platformAdmin === true || (query.orderByChild === 'ownerUid' && query.equalTo === auth.uid))",
+      "$requestId": {
+        ".write": "auth != null && (auth.token.platformAdmin === true || (!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('status').val() === 'pending' && root.child('restaurants').child(newData.child('restaurantId').val()).child('ownerUid').val() === auth.uid))",
+        ".validate": "newData.hasChildren(['restaurantId','ownerUid','productId','status']) && newData.child('ownerUid').isString() && newData.child('restaurantId').isString() && newData.child('productId').isString() && newData.child('status').isString() && (newData.child('status').val() === 'pending' || newData.child('status').val() === 'in_progress' || newData.child('status').val() === 'delivered' || newData.child('status').val() === 'rejected') && (auth.token.platformAdmin === true || newData.child('status').val() === 'pending')"
+      }
+    }
+  }
+}

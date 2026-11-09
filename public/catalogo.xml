@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Catálogo do cardápio (estilo strings.xml).
+  Para trocar um modelo, foto, preço ou texto, edite só este arquivo.
+  - modelo: caminho do GLB dentro de public/models
+  - diametro: tamanho do prato/item em metros, usado para escalar o modelo na AR
+  - rugosidade: aparência da superfície (0 = brilhante, 1 = fosco)
+  - foto: imagem do botão "Imagem"; se o arquivo não existir, aparece o emoji
+  - Calorias, ingredientes e preços são estimativas e devem ser confirmados.
+-->
+<resources>
+  <restaurante nome="Verde"
+               descricao="Cozinha leve, ingredientes da estação e pratos montados com cuidado."
+               capa="/restaurante/capa.jpg"/>
+
+  <categorias>
+    <categoria id="saladas">Saladas</categoria>
+    <categoria id="pratos">Pratos</categoria>
+    <categoria id="sobremesas">Sobremesas</categoria>
+  </categorias>
+
+  <produtos>
+    <produto id="salada" categoria="saladas" modelo="/models/salada.glb"
+             diametro="0.18" rugosidade="0.85" preco="32.90" kcal="260"
+             emoji="🥗" foto="/fotos/salada.jpg"
+             convite="Essa salada está te chamando. Posso acrescentar ao carrinho?">
+      <nome>Salada da casa</nome>
+      <descricao>Mix de folhas, textura crocante e volume. Veja o prato de todos os ângulos antes de pedir.</descricao>
+      <ingredientes>
+        <ingrediente>Mix de folhas</ingrediente>
+        <ingrediente>Tomate cereja</ingrediente>
+        <ingrediente>Pepino</ingrediente>
+        <ingrediente>Castanha-de-caju</ingrediente>
+        <ingrediente>Molho vinagrete</ingrediente>
+      </ingredientes>
+    </produto>
+
+    <produto id="frango" categoria="pratos" modelo="/models/frango-ovos-abacate.glb"
+             diametro="0.26" rugosidade="0.78" preco="49.90" kcal="520"
+             emoji="🍗" foto="/fotos/frango.jpg"
+             convite="Quer tanto esse prato? Posso acrescentar ao carrinho?">
+      <nome>Frango, ovos e abacate</nome>
+      <descricao>Frango com dois ovos e abacate. Observe os ingredientes de perto e veja o tamanho na sua mesa.</descricao>
+      <ingredientes>
+        <ingrediente>Peito de frango grelhado</ingrediente>
+        <ingrediente>Ovos</ingrediente>
+        <ingrediente>Abacate</ingrediente>
+        <ingrediente>Arroz integral</ingrediente>
+        <ingrediente>Legumes</ingrediente>
+      </ingredientes>
+    </produto>
+
+    <produto id="torta" categoria="sobremesas" modelo="/models/torta-morango.glb"
+             diametro="0.16" rugosidade="0.6" preco="22.90" kcal="380"
+             emoji="🍓" foto="/fotos/torta.jpg"
+             convite="Quer tanto a torta? Posso acrescentar ao carrinho?">
+      <nome>Torta de morango</nome>
+      <descricao>Torta de morango com massa amanteigada. Gire e aproxime para ver os detalhes.</descricao>
+      <ingredientes>
+        <ingrediente>Morango</ingrediente>
+        <ingrediente>Massa amanteigada</ingrediente>
+        <ingrediente>Creme</ingrediente>
+        <ingrediente>Calda de morango</ingrediente>
+      </ingredientes>
+    </produto>
+
+    <produto id="cheesecake" categoria="sobremesas" modelo="/models/cheesecake-frutas-vermelhas.glb"
+             diametro="0.16" rugosidade="0.58" preco="24.90" kcal="420"
+             emoji="🍰" foto="/fotos/cheesecake.jpg"
+             convite="Essa cheesecake não sai do seu campo de visão. Posso acrescentar ao carrinho?">
+      <nome>Cheesecake de frutas vermelhas</nome>
+      <descricao>Cheesecake cremoso com frutas vermelhas. Veja a apresentação por todos os lados.</descricao>
+      <ingredientes>
+        <ingrediente>Cream cheese</ingrediente>
+        <ingrediente>Base de biscoito</ingrediente>
+        <ingrediente>Frutas vermelhas</ingrediente>
+        <ingrediente>Manteiga</ingrediente>
+      </ingredientes>
+    </produto>
+
+    <produto id="pizza" categoria="pratos" modelo="/models/pizza-pepperoni.glb"
+             diametro="0.30" rugosidade="0.7" preco="54.90" kcal="680"
+             emoji="🍕" foto="/fotos/pizza.jpg"
+             convite="Essa pizza está irresistível. Posso acrescentar ao carrinho?">
+      <nome>Pizza de pepperoni</nome>
+      <descricao>Massa crocante, molho de tomate, mussarela e pepperoni. Gire a pizza para ver a cobertura de perto.</descricao>
+      <ingredientes>
+        <ingrediente>Massa</ingrediente>
+        <ingrediente>Molho de tomate</ingrediente>
+        <ingrediente>Mussarela</ingrediente>
+        <ingrediente>Pepperoni</ingrediente>
+        <ingrediente>Orégano</ingrediente>
+      </ingredientes>
+    </produto>
+
+    <produto id="x-salada" categoria="pratos" modelo="/models/hamburguer-x-salada.glb"
+             diametro="0.16" rugosidade="0.7" preco="36.90" kcal="620"
+             emoji="🍔" foto="/fotos/x-salada.jpg"
+             convite="Esse X-Salada está pedindo para ser provado. Posso acrescentar ao carrinho?">
+      <nome>X-Salada</nome>
+      <descricao>Hambúrguer com queijo, alface, tomate e cebola, montado na hora. Veja as camadas de perto.</descricao>
+      <ingredientes>
+        <ingrediente>Pão</ingrediente>
+        <ingrediente>Hambúrguer bovino</ingrediente>
+        <ingrediente>Queijo</ingrediente>
+        <ingrediente>Alface</ingrediente>
+        <ingrediente>Tomate</ingrediente>
+        <ingrediente>Cebola</ingrediente>
+        <ingrediente>Maionese</ingrediente>
+      </ingredientes>
+    </produto>
+  </produtos>
+</resources>

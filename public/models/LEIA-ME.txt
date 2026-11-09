@@ -1,0 +1,3 @@
+Coloque aqui os modelos 3D (.glb) referenciados em public/catalogo.xml.
+Nomes esperados: salada.glb, frango-ovos-abacate.glb, torta-morango.glb,
+cheesecake-frutas-vermelhas.glb, pizza-pepperoni.glb, hamburguer-x-salada.glb.

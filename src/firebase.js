@@ -1,0 +1,55 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getDatabase, ref, push, set, update, remove, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
+
+const config={apiKey:import.meta.env.VITE_FIREBASE_API_KEY,authDomain:import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,projectId:import.meta.env.VITE_FIREBASE_PROJECT_ID,appId:import.meta.env.VITE_FIREBASE_APP_ID,databaseURL:import.meta.env.VITE_FIREBASE_DATABASE_URL,messagingSenderId:import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID};
+export const configured=Boolean(config.apiKey && config.authDomain && config.projectId && config.appId && config.databaseURL);
+const app=configured?initializeApp(config):null;
+if(app && import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY)initializeAppCheck(app,{provider:new ReCaptchaEnterpriseProvider(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY),isTokenAutoRefreshEnabled:true});
+export const auth=app?getAuth(app):null;
+export const db=app?getDatabase(app):null;
+const pathOf=(x)=>x.path;
+const wrap=(path)=>({path,id:path.split('/').pop()});
+const collection=(_db,...segments)=>wrap(segments.join('/'));
+const doc=(_db,...segments)=>wrap(segments.join('/'));
+const query=(reference,filter)=>({...reference,filter});
+const where=(field,operator,value)=>{if(operator!=='==')throw Error('Filtro não suportado.');return {field,value};};
+const snapshot=(key,value)=>({id:key,exists:()=>value!==null && value!==undefined,data:()=>value});
+const onSnapshot=(source,onNext,onError)=>{
+  if(!db)return ()=>{};
+  const base=ref(db,pathOf(source));
+  const target=source.filter?dbQuery(base,orderByChild(source.filter.field),equalTo(source.filter.value)):base;
+  return onValue(target,s=>{
+    const value=s.val();
+    const docs=Object.entries(value||{}).map(([key,val])=>snapshot(key,val));
+    onNext({id:source.id,exists:()=>s.exists(),data:()=>value,docs});
+  },onError);
+};
+const addDoc=async(source,value)=>{const r=push(ref(db,pathOf(source)));await set(r,value);return {id:r.key};};
+const setDoc=async(source,value,opts)=>opts?.merge?update(ref(db,pathOf(source)),value):set(ref(db,pathOf(source)),value);
+const updateDoc=(source,value)=>update(ref(db,pathOf(source)),value);
+const deleteDoc=(source)=>remove(ref(db,pathOf(source)));
+const getDoc=async(source)=>{const s=await get(ref(db,pathOf(source)));return snapshot(source.id,s.val());};
+export const store={collection,doc,query,where,addDoc,setDoc,updateDoc,deleteDoc,getDoc,onSnapshot};
+export {onAuthStateChanged,signOut,getRedirectResult};
+export async function loginGoogle(){
+  if(!auth)throw Error('Configure VITE_FIREBASE_* no .env.');
+  const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
+  try{return await signInWithPopup(auth,provider);}catch(e){if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(e.code)){await signInWithRedirect(auth,provider);return null;}throw e;}
+}
+// Fotos são convertidas localmente em WebP Base64 e gravadas como JSON
+// no nó do estabelecimento/produto quando o formulário é salvo.
+// O Realtime Database não armazena arquivos binários: armazena strings data:image/webp;base64,...
+import { preparePhoto } from './media.js';
+export async function uploadMedia(restaurantId, file, kind='photos') {
+  if (kind !== 'photos') throw Error('GLBs devem ser publicados no GitHub Pages e vinculados por URL.');
+  if (!auth?.currentUser) throw Error('Entre com sua conta Google para cadastrar fotografias.');
+  if (!restaurantId) throw Error('Estabelecimento inválido.');
+  return preparePhoto(file);
+}
+export const now=()=>serverTimestamp();
+export const restaurantDoc=rid=>doc(db,'restaurants',rid);
+export const productCollection=rid=>collection(db,'restaurants',rid,'products');
+export const productDoc=(rid,pid)=>doc(db,'restaurants',rid,'products',pid);
+export const requestCollection=()=>collection(db,'modelRequests');
