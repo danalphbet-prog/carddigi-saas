@@ -5,11 +5,15 @@ import { PRODUCTS, CATEGORIES, RESTAURANT, loadCatalog } from './products.js';
 import {
   configured, auth, db, store, loginGoogle, uploadMedia,
   signOut, onAuthStateChanged,
-  now, restaurantDoc, productDoc, productCollection, requestCollection,
+  now, restaurantDoc, productDoc, productCollection, requestCollection, atomicUpdate,
 } from './firebase.js';
 
 import { MAX_REFERENCE_PHOTOS, MAX_BASE64_CHARS } from './media.js';
 import { errText } from './errors.js';
+import { makePublicSlug, publicMenuPath } from './slug.js';
+import { shouldRedirectToBusiness } from './authRoutes.js';
+import { createOrderIntent } from './orders.js';
+import { trackVisit, trackEvent, installErrorReporting } from './telemetry.js';
 import './platform.css';
 
 const {collection, doc, query, where, addDoc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot} = store;
@@ -18,7 +22,7 @@ const blank = {name: '', description: '', cat: 'Pratos', price: 0, kcal: 0, diam
 const cleanHandle = (v) => (v || '').trim().replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
 const slug = (v) => String(v || '').trim();
 
-function navigate(to) { window.history.pushState(null, '', to); window.dispatchEvent(new PopStateEvent('popstate')); window.scrollTo(0, 0); }
+function navigate(to, replace = false) { window.history[replace ? 'replaceState' : 'pushState'](null, '', to); window.dispatchEvent(new PopStateEvent('popstate')); window.scrollTo(0, 0); }
 function A({href, children, ...props}) { return <a href={href} {...props} onClick={(e) => {props.onClick?.(e); if(!e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey){e.preventDefault();navigate(href);}}}>{children}</a>; }
 function Busy({children = 'Carregando…'}) { return <div className="platform-page"><div className="panel-state">{children}</div></div>; }
 function Notice({error, ok}) { return <>{error && <p className="p-error" role="alert">{error}</p>}{ok && <p className="p-success" role="status">{ok}</p>}</>; }
@@ -59,34 +63,73 @@ function GoGoogle({user, target = '/painel', children = 'Continuar com Google'})
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   return <div><button disabled={loading} className="p-btn p-primary" onClick={async()=>{
-    if (user) {navigate(target);return;}
+    if (user) {navigate(target, true);return;}
     setLoading(true);setError('');
-    try {const r = await loginGoogle(); if(r) navigate(target);} catch(e) {setError(errText(e));} finally {setLoading(false);}
+    try {const r = await loginGoogle(); if(r) navigate(target, true);} catch(e) {setError(errText(e));} finally {setLoading(false);}
   }}>{loading ? 'Conectando…' : children}</button><Notice error={error}/></div>;
 }
 function SiteHeader({user, brand}) {return <header className="site-header"><A href="/" className="brand"><span className="brand-mark">◉</span> {brand}</A><nav><A href="/menu/demo">Demonstração</A>{user ? <A href="/painel" className="nav-action">Painel</A> : <A href="/entrar" className="nav-action">Entrar</A>}</nav></header>;}
 function Landing({user, site}) {return <div className="platform-page">
   <SiteHeader user={user} brand={site.name || 'Mesa Imersiva'} />
-  <section className="landing-hero"><div><div className="eyebrow">CARDÁPIO 3D + REALIDADE AUMENTADA</div><h1>{site.headline || 'Uma experiência que começa antes da primeira garfada.'}</h1><p>{site.description || 'Seu cliente explora cada prato em 3D, posiciona o pedido na própria mesa usando a câmera e finaliza direto no WhatsApp do restaurante.'}</p><div className="hero-actions"><GoGoogle user={user}>{user ? 'Acessar meu painel' : 'Criar meu cardápio'}</GoGoogle><A href="/menu/demo" className="p-btn p-outline">Explorar cardápio demo ↗</A></div><p className="subtle">Cadastro com Google · Fotos e itens por restaurante · Modelos AR preparados pela nossa equipe</p></div>
+  <section className="landing-hero"><div><div className="eyebrow">CARDÁPIO 3D + REALIDADE AUMENTADA</div><h1>{site.headline || 'Uma experiência que começa antes da primeira garfada.'}</h1><p>{site.description || 'Seu cliente explora cada prato em 3D, posiciona o pedido na própria mesa usando a câmera e finaliza direto no WhatsApp do restaurante.'}</p><div className="hero-actions"><A href="/entrar" className="p-btn p-primary">Criar meu cardápio →</A><A href="/menu/demo" className="p-btn p-outline">Explorar cardápio demo ↗</A></div><p className="subtle">Cadastro com Google · Fotos e itens por restaurante · Modelos AR preparados pela nossa equipe</p></div>
     <div className="hero-preview"><div className="hero-preview-top">PRÉVIA DA EXPERIÊNCIA <span>● ao vivo</span></div><img alt="Foto do prato de frango e abacate usado no cardápio de demonstração" src="/fotos/frango.jpg"/><div className="hero-preview-bottom"><span>Explore cada detalhe</span><strong>Visualização 3D + AR</strong></div></div>
   </section>
-  <section className="features"><div><span>01 / RESTAURANTE</span><h3>Seu cardápio, sua marca</h3><p>Cadastre produtos, preços, categorias, fotografias, redes sociais e número do WhatsApp. Publique ou pause itens sem depender de suporte.</p></div><div><span>02 / PRODUÇÃO AR</span><h3>Da foto para o modelo</h3><p>Envie as fotos de referência e solicite a criação de um modelo 3D. Nossa equipe trabalha com prazo de referência de até 7 dias.</p></div><div><span>03 / CONSUMIDOR</span><h3>Pedido sem complicação</h3><p>Seu cliente visualiza, monta o carrinho e abre a mensagem completa no WhatsApp do estabelecimento.</p></div></section>
-  <div className="landing-bottom"><p>Crie seu cardápio digital, encante seus clientes e receba pedidos com praticidade.</p><GoGoogle user={user}>{user ? 'Abrir painel' : 'Começar com Google'}</GoGoogle></div>
+  <section className="features"><div><span>01 / RESTAURANTE</span><h3>Seu cardápio, sua marca</h3><p>Cadastre produtos, preços, categorias, fotografias, redes sociais e número do WhatsApp. Gerencie seus produtos e solicite a publicação do cardápio com nossa equipe.</p></div><div><span>02 / PRODUÇÃO AR</span><h3>Da foto para o modelo</h3><p>Envie as fotos de referência e solicite a criação de um modelo 3D. Nossa equipe trabalha com prazo de referência de até 7 dias.</p></div><div><span>03 / CONSUMIDOR</span><h3>Pedido sem complicação</h3><p>Seu cliente visualiza, monta o carrinho e abre a mensagem completa no WhatsApp do estabelecimento.</p></div></section>
+  <div className="landing-bottom"><p>Crie seu cardápio digital, encante seus clientes e receba pedidos com praticidade.</p><A href="/entrar" className="p-btn p-primary">Começar agora →</A></div>
 </div>;}
 function Login({user, site}) {return <div className="platform-page"><SiteHeader brand={site.name || 'Mesa Imersiva'} user={user}/><section className="login-wrap"><div className="login-card"><div className="eyebrow">ACESSO AO ESTABELECIMENTO</div><h1>Entre para criar seu cardápio.</h1><p>Entre com Google para cadastrar seu estabelecimento, organizar os produtos e acompanhar solicitações de modelos 3D.</p><GoGoogle user={user}/><div className="login-divider">Acesso protegido pela sua conta Google</div><p className="subtle">Seu estabelecimento, produtos e cardápio reunidos em um só lugar. Seus clientes não precisam criar conta para fazer pedidos.</p></div></section></div>;}
-function Consumer({rid, demo}) {
+function useResolvedRestaurant(handle) {
+  const [resolved,setResolved]=useState({rid:null,loading:true});
+  useEffect(()=>{
+    if(!handle || !db){setResolved({rid:null,loading:false});return;}
+    let alive=true;
+    setResolved({rid:null,loading:true});
+    // Slugs novos vêm do índice público. IDs antigos continuam acessíveis para não quebrar links já enviados.
+    getDoc(doc(db,'slugIndex',handle)).then(s=>{
+      if(alive)setResolved({rid:s.exists()?s.data():handle,loading:false});
+    }).catch(()=>{if(alive)setResolved({rid:handle,loading:false});});
+    return()=>{alive=false;};
+  },[handle]);
+  return resolved;
+}
+class MenuErrorBoundary extends React.Component {
+  constructor(props){super(props);this.state={failed:false};}
+  static getDerivedStateFromError(){return {failed:true};}
+  componentDidCatch(error){void trackEvent(this.props.rid,'error',error?.message||'Erro ao exibir o cardápio');}
+  render(){return this.state.failed?<Busy>Não foi possível abrir este cardápio agora. Atualize a página e tente novamente.</Busy>:this.props.children;}
+}
+function decodeMenuHandle(path){
+  try{
+    const value=decodeURIComponent(path.slice('/menu/'.length));
+    return /^[A-Za-z0-9_-]{1,120}$/.test(value)?value:'';
+  }catch{return '';}
+}
+function Consumer({handle, demo}) {
+  const resolved=useResolvedRestaurant(demo ? null : handle);
+  const rid=resolved.rid;
   const [r, state] = useRestaurant(demo ? null : rid);
   const [prods, error] = useProducts(demo ? null : rid, true);
   const [models] = useLive('modelCatalog');
   const [sample, setSample] = useState(null);
+  const onMenuEvent = React.useCallback((type,message)=>trackEvent(rid,type,message),[rid]);
+  const onOrder = React.useCallback((order)=>createOrderIntent(rid,order),[rid]);
   useEffect(() => {if (demo) loadCatalog().then(s => setSample({r:{...s.RESTAURANT, instagram:'diemsociety', instagramName:'Diem Society', instagramBio:'Novidades, combos e bastidores', whatsapp:''}, p:s.PRODUCTS.map(p=>({...p,url:''})),c:s.CATEGORIES})).catch(()=>setSample({error:'Catálogo da demo não encontrado.'}));}, [demo]);
+  useEffect(()=>{
+    if(demo || resolved.loading || state!=='ok' || !r?.published)return;
+    trackVisit(rid);
+    const unlisten=installErrorReporting(rid);
+    const onHide=()=>{void trackEvent(rid,'exit');};
+    window.addEventListener('pagehide',onHide);
+    return()=>{unlisten();window.removeEventListener('pagehide',onHide);};
+  },[demo,rid,resolved.loading,state,r?.published]);
+  useEffect(()=>{if(!demo && rid && error)void trackEvent(rid,'error',error);},[error, demo, rid]);
   if (demo) return sample?.r ? <><div className="demo-ribbon"><A href="/">← Início</A> Você está explorando um cardápio de demonstração</div><Menu restaurant={sample.r} products={sample.p} categories={sample.c}/></> : <Busy>{sample?.error || 'Abrindo demonstração…'}</Busy>;
   if (!configured) return <Busy>Não foi possível carregar o cardápio no momento. Tente novamente mais tarde.</Busy>;
-  if (state === 'loading') return <Busy/>;
-  if (!r || !r.published) return <Busy>Este cardápio não está publicado ou não existe. <A href="/">Voltar</A></Busy>;
+  if(resolved.loading || state==='loading')return <Busy/>;
+  if (!r || !r.published) return <Busy>Este cardápio não está publicado ou não existe.</Busy>;
   const mapped = prods.map(p => ({...p,url:(models.find(m=>m.id===p.modelId && m.active)?.url || ''), photo:p.photo || '', ingredients:Array.isArray(p.ingredients)?p.ingredients:[], cat:p.cat || 'Outros', price:Number(p.price || 0), diameter:Number(p.diameter || .2), kcal:Number(p.kcal || 0)}));
   const cats = ['Todos', ...new Set(mapped.map(p => p.cat))];
-  return <>{error && <Notice error={error}/>}<Menu key={rid} restaurant={r} products={mapped} categories={cats}/></>;
+  return <MenuErrorBoundary key={rid} rid={rid}>{error && <Notice error={error}/>}<Menu restaurant={r} products={mapped} categories={cats} onEvent={onMenuEvent} onOrder={onOrder}/></MenuErrorBoundary>;
 }
 function ProductEditor({rid, product, onClose}) {
   const [models] = useLive('modelCatalog');
@@ -140,8 +183,8 @@ function RestaurantSettings({r}) {
   const save = async(e) => { e.preventDefault();setBusy(true);setError('');setOk('');try {
     const whatsapp = f.whatsapp.replace(/\D/g,'');
     if (whatsapp && !/^55\d{10,11}$/.test(whatsapp)) throw Error('WhatsApp precisa ter DDI 55 + DDD + número. Ex.: 5511999999999.');
-    if(f.published && !/^55\d{10,11}$/.test(whatsapp)) throw Error('Configure o WhatsApp antes de publicar.');
-    await updateDoc(restaurantDoc(r.id),{name:f.name.trim().slice(0,90),tagline:f.tagline.trim().slice(0,250),whatsapp, instagram:cleanHandle(f.instagram),instagramName:f.instagramName.trim().slice(0,90),instagramBio:f.instagramBio.trim().slice(0,250),niche:(f.niche||'').trim().slice(0,80),address:(f.address||'').trim().slice(0,240),published:!!f.published,cover:f.cover || '',logo:f.logo || '',updatedAt:now()});
+    
+    await updateDoc(restaurantDoc(r.id),{name:f.name.trim().slice(0,90),tagline:f.tagline.trim().slice(0,250),whatsapp, instagram:cleanHandle(f.instagram),instagramName:f.instagramName.trim().slice(0,90),instagramBio:f.instagramBio.trim().slice(0,250),niche:(f.niche||'').trim().slice(0,80),address:(f.address||'').trim().slice(0,240),cover:f.cover || '',logo:f.logo || '',accentColor:/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843',updatedAt:now()});
     setOk('Configurações salvas.');
   }catch(e){setError(errText(e));}finally{setBusy(false);}};
   const cover = async (file, field='cover')=>{if(!file)return;setBusy(true);setError('');try{const {url} = await uploadMedia(r.id,file);setF(v=>({...v,[field]:url}));setOk('Foto pronta! Toque em Salvar estabelecimento para concluir.');}catch(e){setError(errText(e));}finally{setBusy(false);}};
@@ -153,13 +196,28 @@ function RestaurantSettings({r}) {
     <label className="span-2">Bio do card Instagram<textarea rows={2} value={f.instagramBio||''} onChange={e=>setF({...f,instagramBio:e.target.value})}/></label>
     <label>Foto da capa<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
     {f.logo && <img className="preview-pic" alt="Logotipo" src={f.logo}/>}
-    <label className="checkbox-line span-2"><input type="checkbox" checked={!!f.published} onChange={e=>setF({...f,published:e.target.checked})}/> Publicar cardápio para visitantes</label>
+    <label>Cor de destaque do estabelecimento<input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843'} onChange={e=>setF({...f,accentColor:e.target.value})}/></label>
+    <p className="subtle span-2">A publicação do cardápio é aprovada pela equipe. Para solicitar a publicação, use o botão no topo do painel.</p>
   </div><Notice error={error} ok={ok}/><button className="p-btn p-primary" disabled={busy}>{busy?'Salvando…':'Salvar estabelecimento'}</button></form>;
+}
+function RestaurantOrders({rid}) {
+  const [orders,error]=useLive(`orders/${rid}`);
+  const [notice,setNotice]=useState(''),[busy,setBusy]=useState('');
+  const statuses={initiated:'Aguardando confirmação',confirmed:'Confirmado',preparing:'Em preparo',completed:'Concluído',cancelled:'Cancelado'};
+  const change=async(order,status)=>{
+    setBusy(order.id);setNotice('');
+    try {await updateDoc(doc(db,'orders',rid,order.id),{status,updatedAt:now()});setNotice('Situação do pré-pedido atualizada.');}
+    catch(e){setNotice(errText(e));}finally{setBusy('');}
+  };
+  return <section className="panel"><h2>Pré-pedidos do cardápio</h2><p className="subtle">Os registros abaixo são criados quando o visitante toca em “Fazer pedido no WhatsApp”. A confirmação, o pagamento e o envio da mensagem precisam ser conferidos com o cliente.</p><Notice error={error} ok={notice}/>
+    {orders.length?<div className="orders-list">{orders.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,100).map(o=><article className="order-card" key={o.id}><div className="order-head"><strong>#{o.code||o.id.slice(-6).toUpperCase()}</strong><span>{o.createdAt?new Date(o.createdAt).toLocaleString('pt-BR'):'Agora'}</span></div><h3>{o.customerName||'Cliente não identificado'}</h3><ul>{(Array.isArray(o.items)?o.items:Object.values(o.items||{})).map((item,i)=><li key={i}>{item.quantity} × {item.name} — {BRL(item.price*item.quantity)}</li>)}</ul><p>{o.notes||'Sem observações'}</p><div className="order-foot"><strong>{BRL(o.total)}</strong><label>Etapa<select disabled={busy===o.id} value={o.status||'initiated'} onChange={e=>change(o,e.target.value)}>{Object.entries(statuses).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label></div></article>)}</div>:<p className="empty">Nenhum pré-pedido registrado.</p>}
+  </section>;
 }
 function RestaurantPanel({rid,user,admin}) {
   const [r,status]=useRestaurant(rid), [products,error]=useProducts(rid);
   const [requests,reqError]=useLive('modelRequests', ['ownerUid','==',user.uid]);
   const [models] = useLive('modelCatalog');
+  const [pubRequests,pubError]=useLive('publicationRequests', ['ownerUid','==',user.uid]);
   const [tab,setTab]=useState('items'), [editing,setEditing]=useState(undefined);
   const [notice,setNotice]=useState(''), [busy,setBusy]=useState(false);
   if(status==='loading') return <Busy/>;
@@ -175,12 +233,28 @@ function RestaurantPanel({rid,user,admin}) {
     }catch(e){setNotice(errText(e));}finally{setBusy(false);}
   };
   const remove=async(p)=>{if(!window.confirm(`Excluir permanentemente "${p.name}" do cardápio?`))return;try{await deleteDoc(productDoc(rid,p.id));}catch(e){setNotice(errText(e));}};
-  const url=`${location.origin}/menu/${rid}`;
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="crumb"><A href="/painel">Meus restaurantes</A> / {r.name}</div><div className="dashboard-title"><div><div className="eyebrow">PAINEL DO RESTAURANTE</div><h1>{r.name}</h1><p>{r.published?'Cardápio publicado':'Rascunho — somente você pode administrar'}</p></div><A href={`/menu/${rid}`} className="p-btn p-outline">Ver cardápio ↗</A></div>
-    <div className="share-strip"><div><small>Link do cardápio</small><code>{url}</code></div><button onClick={()=>{navigator.clipboard?.writeText(url);setNotice('Link copiado.');}}>Copiar</button></div>
-    <div className="tabbar"><button className={tab==='items'?'active':''} onClick={()=>setTab('items')}>Produtos ({products.length})</button><button className={tab==='requests'?'active':''} onClick={()=>setTab('requests')}>Solicitações AR ({myRequests.length})</button><button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}>Estabelecimento</button></div>
+  const pendingPub=pubRequests.find(q=>q.restaurantId===rid && q.status==='pending');
+  const lastPub=pubRequests.filter(q=>q.restaurantId===rid).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+  const url=r.published && publicMenuPath(r)?`${location.origin}${publicMenuPath(r)}`:null;
+  const requestPublish=async()=>{
+    setNotice('');
+    if(pendingPub)return setNotice('Já existe uma solicitação de publicação aguardando análise.');
+    if(!/^55\d{10,11}$/.test(String(r.whatsapp||'')))return setNotice('Configure e salve o WhatsApp do estabelecimento antes de solicitar a publicação.');
+    if(!products.some(p=>p.active))return setNotice('Cadastre e ative pelo menos um produto antes de solicitar a publicação.');
+    if(!window.confirm(`Enviar o cardápio de "${r.name}" para análise e publicação?`))return;
+    setBusy(true);
+    try{
+      await addDoc(collection(db,'publicationRequests'),{restaurantId:rid,ownerUid:r.ownerUid,restaurantName:r.name,status:'pending',createdAt:now(),updatedAt:now()});
+      setNotice('Solicitação enviada. A equipe avaliará seu cardápio antes de liberar o link público.');
+    }catch(e){setNotice(errText(e));}finally{setBusy(false);}
+  };
+  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="crumb"><A href="/painel">Meus restaurantes</A> / {r.name}</div><div className="dashboard-title"><div><div className="eyebrow">GESTÃO DO ESTABELECIMENTO</div><h1>{r.name}</h1><p>{r.published?'Cardápio publicado e disponível':pendingPub?'Publicação em análise':'Cardápio privado — publicação sujeita à aprovação'}</p></div><div className="panel-title-actions">{r.published&&url&&<a href={url} target="_blank" rel="noopener noreferrer" className="p-btn p-outline">Abrir cardápio ↗</a>}{!r.published&&<button className="p-btn p-primary" disabled={busy||!!pendingPub} onClick={requestPublish}>{pendingPub?'Aguardando aprovação':busy?'Enviando…':'Solicitar publicação'}</button>}</div></div>
+    <Notice error={pubError} ok={notice}/>
+    {url?<div className="share-strip"><div><small>Seu link público</small><code>{url}</code></div><button onClick={()=>{navigator.clipboard?.writeText(url);setNotice('Link copiado.');}}>Copiar link</button></div>:<div className="pending-strip"><strong>Seu cardápio ainda não tem link público.</strong><span>{lastPub?.status==='rejected'?'Solicitação devolvida para ajustes. Faça as correções e envie novamente.':pendingPub?'Recebemos sua solicitação de publicação.':'Cadastre os produtos e solicite a publicação quando estiver pronto.'}</span></div>}
+    <div className="tabbar"><button className={tab==='items'?'active':''} onClick={()=>setTab('items')}>Produtos ({products.length})</button><button className={tab==='requests'?'active':''} onClick={()=>setTab('requests')}>Modelos 3D ({myRequests.length})</button><button className={tab==='orders'?'active':''} onClick={()=>setTab('orders')}>Pedidos</button><button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}>Minha loja</button></div>
     {tab==='items' && <section className="panel"><div className="panel-head"><div><h2>Seu cardápio</h2><p>Gerencie fotos, informações e disponibilidade.</p></div><button className="p-btn p-primary" onClick={()=>setEditing(null)}>+ Novo item</button></div><Notice error={error} ok={notice}/>{products.length? <div className="item-list">{products.map(p=><div className="item-entry" key={p.id}><div className="item-image">{p.photo?<img src={p.photo} alt=""/>:p.emoji||'🍽️'}</div><div className="item-text"><strong>{p.name}</strong><span>{p.cat} · {BRL(p.price)}</span><small>{p.active?'Ativo':'Oculto'} · {models.some(m=>m.id===p.modelId && m.active)?'3D disponível':'Sem modelo 3D'}</small></div><div className="item-buttons"><button onClick={()=>setEditing(p)}>Editar</button><button disabled={busy || models.some(m=>m.id===p.modelId && m.active)} onClick={()=>askModel(p)}>Solicitar AR</button><button className="danger" onClick={()=>remove(p)}>Excluir</button></div></div>)}</div>:<p className="empty">Nenhum item cadastrado. Comece pelo primeiro prato.</p>}</section>}
     {tab==='requests' && <section className="panel"><h2>Solicitações de modelos AR</h2><p className="subtle">Acompanhe aqui as etapas de produção. O prazo previsto é de até 7 dias, sujeito à análise das fotos enviadas.</p><Notice error={reqError}/>{myRequests.length?myRequests.map(q=><div className="request-row" key={q.id}><div><strong>{q.productName}</strong><small>{q.createdAt ? new Date(q.createdAt).toLocaleDateString('pt-BR') : 'Enviado agora'}</small></div><span className="status-tag">{{pending:'Recebido',in_progress:'Em produção',delivered:'Entregue',rejected:'Precisa de revisão'}[q.status]||q.status}</span></div>):<p className="empty">Você ainda não solicitou modelos.</p>}</section>}
+    {tab==='orders' && <RestaurantOrders rid={rid}/>}
     {tab==='settings' && <RestaurantSettings r={r}/>}
   </div>{editing!==undefined && <ProductEditor rid={rid} product={editing} onClose={()=>setEditing(undefined)}/>}</div>;
 }
@@ -188,9 +262,9 @@ function Overview({user,admin}) {
   const [restaurants,error]=useLive('restaurants',['ownerUid','==',user.uid]);
   const [name,setName]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const create=async(e)=>{e.preventDefault();if(!name.trim())return;setBusy(true);setNotice('');try{
-    const d=await addDoc(collection(db,'restaurants'),{ownerUid:user.uid,name:name.trim().slice(0,90),tagline:'Conheça nosso cardápio em 3D.',whatsapp:'',instagram:'',instagramName:'',instagramBio:'',niche:'',address:'',cover:'',logo:'',published:false,createdAt:now(),updatedAt:now()});navigate(`/painel/restaurante/${d.id}`);
+    const d=await addDoc(collection(db,'restaurants'),{ownerUid:user.uid,name:name.trim().slice(0,90),tagline:'Conheça nosso cardápio em 3D.',whatsapp:'',instagram:'',instagramName:'',instagramBio:'',niche:'',address:'',cover:'',logo:'',accentColor:'#667843',slug:'',publicationStatus:'draft',published:false,createdAt:now(),updatedAt:now()});navigate(`/painel/restaurante/${d.id}`);
   }catch(e){setNotice(errText(e));}finally{setBusy(false);}};
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">ÁREA DO ESTABELECIMENTO</div><h1>Olá, {user.displayName?.split(' ')[0] || 'bem-vindo'}.</h1><p>Organize seus estabelecimentos e os modelos AR.</p></div><button className="p-btn p-outline" onClick={()=>signOut(auth)}>Sair</button></div><section className="panel"><h2>Seus restaurantes</h2><Notice error={error}/>{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado':'Não publicado'}</p></div><A href={`/painel/restaurante/${r.id}`} className="p-btn p-outline">Gerenciar →</A></div>)}{!restaurants.some(r=>r.ownerUid===user.uid)&&<p className="empty">Nenhum restaurante cadastrado.</p>}</section><form className="panel create-rest" onSubmit={create}><h2>Adicionar estabelecimento</h2><p className="subtle">Cada restaurante recebe seu próprio endereço, produtos e painel.</p><div><input required maxLength={90} placeholder="Nome do restaurante" value={name} onChange={e=>setName(e.target.value)}/><button className="p-btn p-primary" disabled={busy}>{busy?'Criando…':'+ Criar restaurante'}</button></div><Notice error={notice}/></form></div></div>;
+  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">ÁREA DO ESTABELECIMENTO</div><h1>Olá, {user.displayName?.split(' ')[0] || 'bem-vindo'}.</h1><p>Organize seus estabelecimentos e os modelos AR.</p></div><div className="panel-title-actions">{admin&&<A href="/gestor" className="p-btn p-outline">Central do gestor</A>}<button className="p-btn p-outline" onClick={async()=>{await signOut(auth);navigate('/',true);}}>Sair da conta</button></div></div><section className="panel"><h2>Seus restaurantes</h2><Notice error={error}/>{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado': 'Em preparação / aguardando aprovação'}</p></div><A href={`/painel/restaurante/${r.id}`} className="p-btn p-outline">Gerenciar →</A></div>)}{!restaurants.some(r=>r.ownerUid===user.uid)&&<p className="empty">Nenhum restaurante cadastrado.</p>}</section><form className="panel create-rest" onSubmit={create}><h2>Adicionar estabelecimento</h2><p className="subtle">Cada restaurante recebe seu próprio endereço, produtos e painel.</p><div><input required maxLength={90} placeholder="Nome do restaurante" value={name} onChange={e=>setName(e.target.value)}/><button className="p-btn p-primary" disabled={busy}>{busy?'Criando…':'+ Criar restaurante'}</button></div><Notice error={notice}/></form></div></div>;
 }
 function PlatformEditor({site}) {
   const [f,setF]=useState({...site}),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -228,54 +302,154 @@ function ModelCatalogAdmin({models}) {
     {models.map(m=><div className="restaurant-entry" key={m.id}><div><strong>{m.name}</strong><p>{m.category||'Geral'} · ID: <code>{m.id}</code></p><a href={m.url} target="_blank" rel="noopener noreferrer">Abrir GLB</a></div><button onClick={()=>toggle(m)}>{m.active?'Desativar':'Ativar'}</button></div>)}
   </section>;
 }
+const fmtDate = v => Number(v)?new Date(Number(v)).toLocaleString('pt-BR'):'Agora';
+const chartDay = v => new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+function VisitsChart({events}) {
+  const days = Array.from({length:7},(_,i)=>{
+    const date=new Date();date.setHours(0,0,0,0);date.setDate(date.getDate()-6+i);
+    const from=date.getTime(), until=from+86400000;
+    return {label:chartDay(date),views:events.filter(e=>e.type==='view'&&e.at>=from&&e.at<until).length,orders:events.filter(e=>e.type==='order_intent'&&e.at>=from&&e.at<until).length};
+  });
+  const max=Math.max(1,...days.map(d=>Math.max(d.views,d.orders)));
+  return <div className="visits-chart" role="img" aria-label={`Gráfico de acessos nos últimos sete dias: ${days.map(d=>`${d.label}: ${d.views} visitas, ${d.orders} pedidos iniciados`).join('; ')}`}>
+    {days.map(d=><div key={d.label} className="chart-column"><div className="chart-sticks"><div className="chart-stick" style={{height:`${Math.max(3,100*d.views/max)}%`}} title={`${d.views} visitas`}/><div className="chart-stick orders" style={{height:`${Math.max(3,100*d.orders/max)}%`}} title={`${d.orders} aberturas do WhatsApp`}/></div><span>{d.label}</span></div>)}
+  </div>;
+}
 function Admin({user,site}) {
-  const [restaurants,error]=useLive('restaurants');
+  const [restaurants,restaurantsError]=useLive('restaurants');
   const [requests,requestError]=useLive('modelRequests');
-  const [tab,setTab]=useState('queue'),[busy,setBusy]=useState(null),[notice,setNotice]=useState('');
-  const [models] = useLive('modelCatalog');
+  const [publicationRequests,pubError]=useLive('publicationRequests');
+  const [analytics,analyticsError]=useLive('analytics');
+  const [models]=useLive('modelCatalog');
+  const [tab,setTab]=useState('publications'),[busy,setBusy]=useState(null),[notice,setNotice]=useState('');
+  const allEvents=restaurants.flatMap(r=>Object.entries(analytics.find(x=>x.id===r.id)?.events||{}).map(([id,e])=>({...e,id,restaurantId:r.id,restaurantName:r.name}))).sort((a,b)=>(b.at||0)-(a.at||0));
+  const allErrors=allEvents.filter(e=>e.type==='error');
+  const eventsFor=(rid)=>allEvents.filter(e=>e.restaurantId===rid);
   const act=async(q,status)=>{
     setBusy(q.id);setNotice('');try{
       let modelId='';
       if(status==='delivered') {
         modelId=window.prompt('Informe o ID de um modelo ativo do catálogo (veja aba Modelos):')?.trim() || '';
-        if(!models.some(m=>m.id===modelId && m.active)) throw Error('Escolha um ID de modelo ativo válido.');
+        if(!models.some(m=>m.id===modelId && m.active))throw Error('Escolha um ID de modelo ativo válido.');
       }
       await updateDoc(doc(db,'modelRequests',q.id),{status,updatedAt:now(),...(status==='delivered'?{deliveredAt:now(),modelId}:{})});
-      if(status==='delivered') await updateDoc(productDoc(q.restaurantId,q.productId),{modelId,modelStatus:'delivered',updatedAt:now()});
-      if(status==='in_progress') await updateDoc(productDoc(q.restaurantId,q.productId),{modelStatus:'in_progress',updatedAt:now()});
+      if(status==='delivered')await updateDoc(productDoc(q.restaurantId,q.productId),{modelId,modelStatus:'delivered',updatedAt:now()});
+      if(status==='in_progress')await updateDoc(productDoc(q.restaurantId,q.productId),{modelStatus:'in_progress',updatedAt:now()});
       setNotice(status==='delivered'?'Modelo do catálogo vinculado ao produto.':'Solicitação atualizada.');
     }catch(e){setNotice(errText(e));}finally{setBusy(null);}
   };
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">GESTÃO DO SAAS — ACESSO PRIVILEGIADO</div><h1>Central de administração</h1><p>Acompanhe os estabelecimentos, modelos e configurações públicas.</p></div><A href="/painel" className="p-btn p-outline">Painel pessoal</A></div><div className="stat-grid"><div><strong>{restaurants.length}</strong><span>Restaurantes</span></div><div><strong>{requests.filter(r=>r.status==='pending').length}</strong><span>Aguardando</span></div><div><strong>{requests.filter(r=>r.status==='in_progress').length}</strong><span>Em produção</span></div><div><strong>{requests.filter(r=>r.status==='delivered').length}</strong><span>Entregues</span></div></div><div className="tabbar"><button className={tab==='queue'?'active':''} onClick={()=>setTab('queue')}>Pedidos AR</button><button className={tab==='models'?'active':''} onClick={()=>setTab('models')}>Catálogo 3D ({models.length})</button><button className={tab==='restaurants'?'active':''} onClick={()=>setTab('restaurants')}>Restaurantes</button><button className={tab==='site'?'active':''} onClick={()=>setTab('site')}>Site</button></div>
-  <Notice error={error || requestError} ok={notice}/>
-  {tab==='queue' && <section className="panel"><h2>Produção e entrega de modelos</h2><p className="subtle">Somente o gestor autorizado pode atribuir GLBs aos itens. A data-alvo é de até 7 dias após cada requisição.</p>{requests.length?requests.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(q=><AdminRequestCard key={q.id} q={q} restaurant={restaurants.find(r=>r.id===q.restaurantId)} busy={busy} act={act}/>):<p className="empty">Nenhuma requisição recebida.</p>}</section>}
-  {tab==='models' && <ModelCatalogAdmin models={models}/>}
-  {tab==='restaurants' && <section className="panel"><h2>Restaurantes registrados</h2>{restaurants.map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado':'Rascunho'} · Proprietário: {r.ownerUid}</p></div><A className="p-btn p-outline" href={`/painel/restaurante/${r.id}`}>Inspecionar</A></div>)}</section>}
-  {tab==='site' && <PlatformEditor site={site}/>}
+  const reviewPublication=async(q,decision)=>{
+    const r=restaurants.find(x=>x.id===q.restaurantId);
+    if(!r) return setNotice('Estabelecimento não encontrado.');
+    setBusy(q.id);setNotice('');
+    try{
+      if(decision==='rejected'){
+        await atomicUpdate({[`publicationRequests/${q.id}/status`]:'rejected',[`publicationRequests/${q.id}/reviewedAt`]:now(),[`restaurants/${r.id}/publicationStatus`]:'rejected'});
+        setNotice('Solicitação devolvida para revisão.');return;
+      }
+      if(!/^55\d{10,11}$/.test(r.whatsapp||''))throw Error('O restaurante precisa cadastrar um WhatsApp válido antes da aprovação.');
+      const all=await getDoc(productCollection(r.id));
+      if(!Object.values(all.data()||{}).some(p=>p?.active))throw Error('O cardápio precisa de pelo menos um produto ativo.');
+      let slug=r.slug || '';
+      if(!slug) {
+        // Confere se o sufixo de quatro caracteres ainda está livre.
+        for(let i=0;i<20;i++) {
+          const candidate=makePublicSlug(r.name);
+          const exists=await getDoc(doc(db,'slugIndex',candidate));
+          if(!exists.exists()){slug=candidate;break;}
+        }
+      }
+      if(!slug)throw Error('Não foi possível criar um endereço disponível. Tente novamente.');
+      await atomicUpdate({
+        [`slugIndex/${slug}`]:r.id,
+        [`restaurants/${r.id}/slug`]:slug,
+        [`restaurants/${r.id}/published`]:true,
+        [`restaurants/${r.id}/publicationStatus`]:'approved',
+        [`restaurants/${r.id}/reviewedAt`]:now(),
+        [`publicationRequests/${q.id}/status`]:'approved',
+        [`publicationRequests/${q.id}/reviewedAt`]:now(),
+        [`publicationRequests/${q.id}/slug`]:slug,
+      });
+      setNotice(`Cardápio publicado: ${location.origin}/menu/${slug}`);
+    }catch(e){setNotice(errText(e));}finally{setBusy(null);}
+  };
+  const assignLegacyLink=async(r)=>{
+    setNotice('');
+    if(r.slug)return;
+    setBusy(r.id);
+    try{
+      let result='';
+      for(let i=0;i<20;i++){
+        const candidate=makePublicSlug(r.name);
+        if(!(await getDoc(doc(db,'slugIndex',candidate))).exists()){result=candidate;break;}
+      }
+      if(!result)throw Error('Não foi possível criar um endereço. Tente novamente.');
+      await atomicUpdate({[`slugIndex/${result}`]:r.id,[`restaurants/${r.id}/slug`]:result,[`restaurants/${r.id}/publicationStatus`]:r.published?'approved':'paused',[`restaurants/${r.id}/updatedAt`]:now()});
+      setNotice('Endereço público atualizado para: '+location.origin+'/menu/'+result);
+    }catch(e){setNotice(errText(e));}finally{setBusy(null);}
+  };
+  const pauseRestaurant=async(r)=>{
+    if(!window.confirm(`${r.published?'Retirar do ar':'Liberar novamente'} o cardápio "${r.name}"?`))return;
+    try{
+      // A retomada só funciona para estabelecimentos que já passaram pela aprovação.
+      if(!r.published && (!r.slug || r.publicationStatus==='draft'))throw Error('Aprovação inicial obrigatória. Abra a solicitação de publicação.');
+      await updateDoc(restaurantDoc(r.id),{published:!r.published,publicationStatus:r.published?'paused':'approved',updatedAt:now()});
+      setNotice('Situação do cardápio atualizada.');
+    }catch(e){setNotice(errText(e));}
+  };
+  const pending=publicationRequests.filter(q=>q.status==='pending').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  const currentTab={publications:'Publicações',analytics:'Indicadores',errors:'Erros',queue:'Modelos AR',models:'Catálogo 3D',restaurants:'Restaurantes',site:'Site'}[tab];
+  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap">
+    <div className="dashboard-title"><div><div className="eyebrow">CENTRAL DE GESTÃO</div><h1>Controle da plataforma</h1><p>Publicações, estabelecimentos, solicitações e qualidade do serviço, em um só lugar.</p></div><A href="/painel" className="p-btn p-outline">Minha conta</A></div>
+    <div className="stat-grid"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{pending.length}</strong><span>Publicações pendentes</span></div><div><strong>{allEvents.filter(e=>e.type==='view').length}</strong><span>Visitas registradas</span></div><div><strong>{allErrors.length}</strong><span>Erros coletados</span></div></div>
+    <div className="tabbar admin-tabbar">{[['publications','Aprovações'],['analytics','Gráficos'],['errors','Erros'],['queue','Solicitações AR'],['models','Biblioteca 3D'],['restaurants','Restaurantes'],['site','Site']].map(([id,name])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{name}{id==='publications'&&pending.length?` (${pending.length})`:''}</button>)}</div>
+    <Notice error={restaurantsError||requestError||pubError||analyticsError} ok={notice}/>
+    {tab==='publications' && <section className="panel"><h2>Solicitações de publicação</h2><p className="subtle">O cardápio só fica público após sua aprovação. O endereço recebe o nome do estabelecimento e quatro caracteres.</p>{pending.length?pending.map(q=>{
+      const r=restaurants.find(x=>x.id===q.restaurantId);
+      return <div className="restaurant-entry publication-entry" key={q.id}><div><strong>{r?.name||q.restaurantName||'Estabelecimento'}</strong><p>{r?.niche||'Sem nicho'} · {r?.whatsapp||'WhatsApp não cadastrado'} · {fmtDate(q.createdAt)}</p>{r?.tagline&&<small>{r.tagline}</small>}</div><div className="admin-actions"><A className="p-btn p-outline" href={`/painel/restaurante/${q.restaurantId}`}>Inspecionar</A><button disabled={busy===q.id} onClick={()=>reviewPublication(q,'approved')}>Aprovar</button><button disabled={busy===q.id} onClick={()=>reviewPublication(q,'rejected')}>Solicitar ajustes</button></div></div>;
+    }):<p className="empty">Nenhuma publicação aguardando aprovação.</p>}</section>}
+    {tab==='analytics' && <section className="panel"><h2>Fluxo de acessos</h2><p className="subtle">Métricas anônimas capturadas ao abrir um cardápio. Saídas e erros dependem da conexão do visitante, por isso podem não ser registrados em todos os casos.</p><div className="legend"><span><i className="legend-dot"/>Visualizações</span><span><i className="legend-dot orders"/>Aberturas do WhatsApp</span></div><VisitsChart events={allEvents}/><h3>Por estabelecimento</h3><div className="analytics-table">{restaurants.map(r=>{const entries=eventsFor(r.id);return <div className="analytics-row" key={r.id}><strong>{r.name}</strong><span>{entries.filter(e=>e.type==='view').length} visitas</span><span>{entries.filter(e=>e.type==='exit').length} saídas</span><span>{entries.filter(e=>e.type==='order_intent').length} pedidos iniciados</span><span>{entries.filter(e=>e.type==='error').length} erros</span></div>;})}</div></section>}
+    {tab==='errors' && <section className="panel"><h2>Registro de falhas do cardápio</h2><p className="subtle">Erros capturados no navegador dos visitantes são enviados sem informações pessoais, com limitação por visita.</p>{allErrors.length?allErrors.slice(0,100).map(e=><div className="error-entry" key={e.restaurantId+e.id}><div><strong>{e.restaurantName}</strong><small>{fmtDate(e.at)}</small></div><code>{e.message||'Falha não identificada'}</code></div>):<p className="empty">Nenhum erro recebido.</p>}</section>}
+    {tab==='queue' && <section className="panel"><h2>Produção e entrega de modelos</h2><p className="subtle">Somente contas gestoras autorizadas atribuem URLs de modelos 3D. Prazo de referência: sete dias.</p>{requests.length?requests.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(q=><AdminRequestCard key={q.id} q={q} restaurant={restaurants.find(r=>r.id===q.restaurantId)} busy={busy} act={act}/>):<p className="empty">Nenhuma solicitação AR recebida.</p>}</section>}
+    {tab==='models' && <ModelCatalogAdmin models={models}/>}
+    {tab==='restaurants' && <section className="panel"><h2>Todos os estabelecimentos</h2>{restaurants.map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Online':'Privado'} · {r.slug||'Aguardando endereço público'}</p>{r.published&&r.slug&&<a href={`${location.origin}/menu/${r.slug}`} target="_blank" rel="noopener noreferrer">Abrir cardápio público</a>}</div><div className="admin-actions"><A className="p-btn p-outline" href={`/painel/restaurante/${r.id}`}>Gerenciar</A>{!r.slug&&(r.published||r.publicationStatus==='paused')&&<button disabled={busy===r.id} onClick={()=>assignLegacyLink(r)}>Gerar link público</button>}<button onClick={()=>pauseRestaurant(r)}>{r.published?'Suspender':'Reativar'}</button></div></div>)}</section>}
+    {tab==='site' && <PlatformEditor site={site}/>}
   </div></div>;
 }
 const defaults = {name:'Mesa Imersiva',headline:'Uma experiência que começa antes da primeira garfada.',description:'Transforme o cardápio em uma experiência: modelos 3D, realidade aumentada e pedidos pelo WhatsApp.'};
 function Root() {
-  const [path,setPath]=useState(location.pathname),[user,setUser]=useState(undefined),[admin,setAdmin]=useState(false),[site,setSite]=useState(defaults);
+  const [path,setPath]=useState(location.pathname),[user,setUser]=useState(undefined),[admin,setAdmin]=useState(undefined),[site,setSite]=useState(defaults);
   useEffect(()=>{const fn=()=>setPath(location.pathname);window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn)},[]);
   useEffect(()=>{
-    if (!auth) {setUser(null);return;}
-    return onAuthStateChanged(auth,async(u)=>{
-      setUser(u);if(u){try{const t=await u.getIdTokenResult();setAdmin(t.claims.platformAdmin===true);}catch{setAdmin(false);}}else setAdmin(false);
+    if (!auth) {setUser(null);setAdmin(false);return;}
+    let alive=true, epoch=0;
+    const unsubscribe=onAuthStateChanged(auth,async(u)=>{
+      if(!alive)return;
+      const turn=++epoch;
+      setUser(u);
+      if(!u){setAdmin(false);return;}
+      setAdmin(undefined);
+      try {const t=await u.getIdTokenResult(true);if(alive&&epoch===turn)setAdmin(t.claims.platformAdmin===true);}
+      catch{if(alive&&epoch===turn)setAdmin(false);}
     });
+    return()=>{alive=false;unsubscribe();};
   },[]);
   useEffect(()=>{if(!db)return;return onSnapshot(doc(db,'settings','site'),s=>{if(s.exists())setSite({...defaults,...s.data()});},()=>{});},[]);
+  // Sessão Google persistente: sem exibir a landing nem o login ao abrir ou voltar.
+  // Só redirecionamos rotas de apresentação; links de cardápios seguem públicos.
+  useEffect(()=>{if(shouldRedirectToBusiness(path,!!user))navigate('/painel',true);},[user,path]);
   if(path==='/menu/demo') return <Consumer demo/>;
-  if(path.startsWith('/menu/'))return <Consumer rid={path.split('/')[2]}/>;
-  if(path==='/entrar')return <Login user={user} site={site}/>;
+  if(path.startsWith('/menu/'))return <Consumer handle={decodeMenuHandle(path)}/>;
+  if(user===undefined)return <Busy>Restaurando sua sessão…</Busy>;
+  if(shouldRedirectToBusiness(path,!!user))return <Busy>Abrindo sua gestão…</Busy>;
+  if(path==='/entrar')return <Login user={null} site={site}/>;
   if(path==='/painel' || path.startsWith('/painel/') || path==='/gestor'){
     if(!configured)return <Busy>O serviço está temporariamente indisponível. Tente novamente mais tarde.</Busy>;
-    if(user===undefined)return <Busy>Validando sessão…</Busy>;
     if(!user)return <Login user={null} site={site}/>;
-    if(path==='/gestor')return admin?<Admin user={user} site={site}/>:<Busy>Você não tem permissão para acessar esta página.</Busy>;
-    if(path.startsWith('/painel/restaurante/'))return <RestaurantPanel key={path} rid={path.split('/')[3]} user={user} admin={admin}/>;
-    return <Overview user={user} admin={admin}/>;
+    if(path==='/gestor')return admin===undefined?<Busy>Verificando permissão…</Busy>:admin?<Admin user={user} site={site}/>:<Busy>Você não tem permissão para acessar esta página.</Busy>;
+    if(path.startsWith('/painel/restaurante/'))return <RestaurantPanel key={path} rid={path.split('/')[3]} user={user} admin={admin===true}/>;
+    return <Overview user={user} admin={admin===true}/>;
   }
-  return <Landing user={user} site={site}/>;
+  return <Landing user={null} site={site}/>;
 }
 createRoot(document.getElementById('root')).render(<Root/>);

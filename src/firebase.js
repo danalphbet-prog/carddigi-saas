@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getDatabase, ref, push, set, update, remove, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
@@ -31,6 +31,7 @@ const setDoc=async(source,value,opts)=>opts?.merge?update(ref(db,pathOf(source))
 const updateDoc=(source,value)=>update(ref(db,pathOf(source)),value);
 const deleteDoc=(source)=>remove(ref(db,pathOf(source)));
 const getDoc=async(source)=>{const s=await get(ref(db,pathOf(source)));return snapshot(source.id,s.val());};
+export const atomicUpdate=(changes)=>update(ref(db),changes);
 export const store={collection,doc,query,where,addDoc,setDoc,updateDoc,deleteDoc,getDoc,onSnapshot};
 export {onAuthStateChanged,signOut,getRedirectResult};
 export async function loginGoogle(){
@@ -39,6 +40,7 @@ export async function loginGoogle(){
   provider.setCustomParameters({prompt:'select_account'});
   // O clique abre o seletor diretamente, sem redirecionar para um domínio diferente.
   // Em hospedagens externas, redirecionamentos podem falhar por restrições de cookies.
+  await setPersistence(auth, browserLocalPersistence); // sessão permanece após atualizar ou reabrir o navegador
   return signInWithPopup(auth, provider);
 }
 // Fotos são convertidas localmente em WebP Base64 e gravadas como JSON

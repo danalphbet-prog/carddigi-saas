@@ -1,11 +1,13 @@
-# MESA IMERSIVA SAAS V3 — Firebase `carddigi` + fotos Base64
+# MESA IMERSIVA SAAS V5 — Gestão + Firebase `carddigi` + fotos Base64
+
+**LEIA PRIMEIRO: `ATUALIZACAO_V5.md`** (regras de publicação, login persistente e atualização no Render).
 
 ## Serviços
 - **Firebase Authentication (Google)**: login no painel de restaurante e gestor.
 - **Firebase Realtime Database**: todos os dados estruturados em JSON. Não usa Firestore nem Storage.
 - **Fotos de produtos, capa, logotipo e fotos de referência**: convertidas no navegador para **512 × 512 px WebP**, em **Base64** (`data:image/webp;base64,...`), e gravadas **diretamente no Realtime Database** dentro dos registros do estabelecimento ou do produto.
 - **GLBs**: arquivos mantidos fora do Firebase, em GitHub Pages / servidor HTTPS, gerenciados pelo gestor. No Realtime fica apenas a URL `.glb`.
-- **Vendas**: consumidor adiciona produtos ao carrinho e finaliza via WhatsApp do restaurante.
+- **Pré-pedidos**: a intenção de pedido (itens, valor e nome/observações opcionais) é registrada no Realtime e o WhatsApp é aberto. O restaurante pode acompanhar e mudar os status manualmente; não há confirmação automática de pagamento ou envio pela plataforma.
 
 ## 1. Configurar Firebase no console
 1. Entre em https://console.firebase.google.com/project/carddigi/overview
@@ -44,7 +46,7 @@ Depois faça logout e login novamente. Não use regras públicas de escrita para
 2. Cadastra pratos, categorias, preços, fotos; ao escolher uma foto, ela é **processada localmente**, exibida em prévia e só é gravada em JSON no Realtime quando o usuário clica em **Salvar**.
 3. Biblioteca global de modelos: o gestor cadastra modelos `.glb` e URLs GitHub Pages em `/gestor`; restaurante escolhe entre os ativos ou solicita novo modelo a partir das fotos (prazo de referência de 7 dias).
 4. O gestor vê requisições, produz e publica GLBs na hospedagem externa, atribui um modelo à solicitação; a URL fica no catálogo global e o produto armazena o `modelId`.
-5. Consumidor acessa `/menu/ID`, vê a foto e AR 3D quando há modelo, monta carrinho e envia pedido ao WhatsApp.
+5. Consumidor acessa `/menu/nome-do-restaurante-A7K2` (endereço aprovado pelo gestor, sufixo ilustrativo), vê a foto e AR 3D quando há modelo, monta carrinho e envia pedido ao WhatsApp.
 
 ## Limites importantes de Base64
 - Cada foto: 512×512 WebP, Base64 com **até 190.000 caracteres** (em média até ~140 KB codificados em bytes), limite aplicado em cliente e regras de banco.

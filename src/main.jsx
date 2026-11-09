@@ -110,7 +110,7 @@ function InstagramCard({ restaurant, small = false }) {
 }
 
 // A sessão WebXR é pedida no clique (gesto do usuário). O overlay DOM é criado antes disso.
-function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restaurant }) {
+function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restaurant, onEvent=()=>{} }) {
   const hostRef = useRef(null);
   const actions = useRef({});
   const [light, setLight] = useState('Luz padrão');
@@ -325,6 +325,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
         });
       } catch (err) {
         say('Não foi possível abrir a AR: ' + (err.message || err));
+        onEvent('error','Falha na realidade aumentada: '+(err?.message || 'Erro desconhecido')); 
       }
     };
     init();
@@ -370,7 +371,8 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
   </>, overlay);
 }
 
-export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories = CATEGORIES }) {
+const noop = () => {};
+export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories = CATEGORIES, onEvent = noop, onOrder = noop }) {
   const [theme, setTheme] = useState(() => { try { return localStorage.getItem('verde-theme') || 'dark'; } catch { return 'dark'; } });
   const [economy, setEconomy] = useState(() => { try { return localStorage.getItem('verde-luz') === 'economica'; } catch { return false; } });
   const [cat, setCat] = useState('Todos');
@@ -381,7 +383,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
   const [cart, setCart] = useState({});
   const [ar, setAR] = useState(null);
   const [viewError, setViewError] = useState('');
-  const onViewError = useCallback((m) => setViewError(m), []);
+  const onViewError = useCallback((m) => {setViewError(m);onEvent('error',m);}, [onEvent]);
   const closeAR = useCallback(() => setAR(null), []);
 
   useEffect(() => {
@@ -422,6 +424,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
       });
     }
     sessionP.catch(() => {});
+    onEvent('ar_open');
     setAR({ product, overlay, sessionP });
   };
 
@@ -446,10 +449,13 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
         const name = document.getElementById('customer-name')?.value.trim();
         const notes = document.getElementById('customer-notes')?.value.trim();
         const lines = visibleProducts.filter((p) => cart[p.id]).map((p) => `${cart[p.id]}x ${p.name} — ${fmt(p.price * cart[p.id])}`);
-        const text = [`*Pedido — ${restaurant.name}*`, '', ...lines, '', `*Total: ${fmt(total)}*`, ...(name ? [`Nome: ${name}`] : []), ...(notes ? [`Observações: ${notes}`] : []), '', 'Olá! Gostaria de confirmar este pedido.'].join('\n');
+        const code=onOrder({customerName:name,notes,items:visibleProducts.filter(p=>cart[p.id]).map(p=>({name:p.name,quantity:cart[p.id],price:p.price}))});
+        const text = [`*Pedido — ${restaurant.name}*`, ...(code?[`Referência: #${code}`]:[]), '', ...lines, '', `*Total: ${fmt(total)}*`, ...(name ? [`Nome: ${name}`] : []), ...(notes ? [`Observações: ${notes}`] : []), '', 'Olá! Gostaria de confirmar este pedido.'].join('\n');
+        // Registro anônimo de intenção; não implica pedido enviado ou confirmado pelo WhatsApp.
+        onEvent('order_intent');
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
       }}>Fazer pedido no WhatsApp</button>
-      <p className="checkout-note">O pedido será preparado como mensagem no WhatsApp; o envio e a confirmação acontecem lá.</p>
+      <p className="checkout-note">Ao continuar, o cardápio registra um pré-pedido para o estabelecimento. A mensagem será aberta no WhatsApp, onde o envio e a confirmação acontecem.</p>
     </>
   );
   const sheetSettings = (
@@ -472,7 +478,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
     </>
   );
 
-  return <div className="app">
+  return <div className="app" style={restaurant.accentColor && /^#[0-9a-f]{6}$/i.test(restaurant.accentColor) ? {'--accent':restaurant.accentColor} : undefined}>
     <header className="topbar">
       <button className="icon-btn" onClick={() => setSheet('settings')} aria-label="Configurações"><I d={ICON.gear} /></button>
       <span className="top-title">{restaurant.name}</span>
@@ -554,7 +560,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
       </div>
     </div>}
 
-    {ar && <ARSession key={ar.product.id} product={ar.product} overlay={ar.overlay} sessionP={ar.sessionP} onClose={closeAR} economy={economy} onAdd={incItem} restaurant={restaurant} />}
+    {ar && <ARSession key={ar.product.id} product={ar.product} overlay={ar.overlay} sessionP={ar.sessionP} onClose={closeAR} economy={economy} onAdd={incItem} restaurant={restaurant} onEvent={onEvent} />}
 
     {sheet && <div className="scrim" onClick={() => setSheet(null)}>
       <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
