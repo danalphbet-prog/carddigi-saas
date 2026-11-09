@@ -62,7 +62,7 @@ function Viewer({ product, onError }) {
       if (removed) { disposeObject(model); return; }
       object = model;
       scene.add(model);
-    }).catch((error) => { if (!removed) onError(error.message || 'Falha ao abrir GLB'); });
+    }).catch(() => { if (!removed) onError('Não foi possível carregar a visualização 3D.'); });
 
     const resize = () => {
       if (!host.clientWidth || !host.clientHeight) return;
@@ -413,7 +413,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
     document.body.appendChild(overlay);
     let sessionP;
     if (!window.isSecureContext || !navigator.xr) {
-      sessionP = Promise.reject(new Error('AR exige Chrome Android compatível, HTTPS ou localhost.'));
+      sessionP = Promise.reject(new Error('A realidade aumentada não está disponível neste navegador ou dispositivo.'));
     } else {
       sessionP = navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
@@ -528,7 +528,7 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
             {product.url && <button className={mode === '3d' ? 'on' : ''} onClick={() => setMode('3d')} aria-pressed={mode === '3d'}><I d={ICON.cube} />3D</button>}
             <button className={mode === 'photo' ? 'on' : ''} onClick={() => setMode('photo')} aria-pressed={mode === 'photo'}><I d={ICON.image} />Imagem</button>
           </div>
-          {mode === '3d' && viewError && <p className="error">Erro ao carregar o modelo: {viewError}</p>}
+          {mode === '3d' && viewError && <p className="error">{viewError}</p>}
         </div>
         <div className="info">
           <h1>{product.name}</h1>

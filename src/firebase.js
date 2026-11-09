@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getDatabase, ref, push, set, update, remove, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
@@ -34,16 +34,19 @@ const getDoc=async(source)=>{const s=await get(ref(db,pathOf(source)));return sn
 export const store={collection,doc,query,where,addDoc,setDoc,updateDoc,deleteDoc,getDoc,onSnapshot};
 export {onAuthStateChanged,signOut,getRedirectResult};
 export async function loginGoogle(){
-  if(!auth)throw Error('Configure VITE_FIREBASE_* no .env.');
-  const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
-  try{return await signInWithPopup(auth,provider);}catch(e){if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(e.code)){await signInWithRedirect(auth,provider);return null;}throw e;}
+  if(!auth)throw Object.assign(new Error('Serviço de acesso indisponível.'),{code:'auth/service-unavailable'});
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  // O clique abre o seletor diretamente, sem redirecionar para um domínio diferente.
+  // Em hospedagens externas, redirecionamentos podem falhar por restrições de cookies.
+  return signInWithPopup(auth, provider);
 }
 // Fotos são convertidas localmente em WebP Base64 e gravadas como JSON
 // no nó do estabelecimento/produto quando o formulário é salvo.
 // O Realtime Database não armazena arquivos binários: armazena strings data:image/webp;base64,...
 import { preparePhoto } from './media.js';
 export async function uploadMedia(restaurantId, file, kind='photos') {
-  if (kind !== 'photos') throw Error('GLBs devem ser publicados no GitHub Pages e vinculados por URL.');
+  if (kind !== 'photos') throw Error('Esta opção aceita apenas fotografias.');
   if (!auth?.currentUser) throw Error('Entre com sua conta Google para cadastrar fotografias.');
   if (!restaurantId) throw Error('Estabelecimento inválido.');
   return preparePhoto(file);

@@ -4,11 +4,12 @@ import { Menu } from './main.jsx';
 import { PRODUCTS, CATEGORIES, RESTAURANT, loadCatalog } from './products.js';
 import {
   configured, auth, db, store, loginGoogle, uploadMedia,
-  signOut, onAuthStateChanged, getRedirectResult,
+  signOut, onAuthStateChanged,
   now, restaurantDoc, productDoc, productCollection, requestCollection,
 } from './firebase.js';
 
 import { MAX_REFERENCE_PHOTOS, MAX_BASE64_CHARS } from './media.js';
+import { errText } from './errors.js';
 import './platform.css';
 
 const {collection, doc, query, where, addDoc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot} = store;
@@ -16,7 +17,6 @@ const BRL = (v) => Number(v || 0).toLocaleString('pt-BR', {style: 'currency', cu
 const blank = {name: '', description: '', cat: 'Pratos', price: 0, kcal: 0, diameter: .22, roughness: .76, ingredients: '', emoji: '🍽️', prompt: 'Gostaria de adicionar ao pedido?', photo: '', referencePhotos: [], active: true};
 const cleanHandle = (v) => (v || '').trim().replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
 const slug = (v) => String(v || '').trim();
-const errText = (e) => ({'auth/unauthorized-domain': 'Domínio não autorizado no Firebase Authentication.', 'permission-denied': 'Operação bloqueada pelas regras de segurança.', 'auth/popup-closed-by-user': 'Login cancelado.', 'database/permission-denied': 'Acesso negado pelo Realtime Database.'}[e?.code] || e?.message || String(e));
 
 function navigate(to) { window.history.pushState(null, '', to); window.dispatchEvent(new PopStateEvent('popstate')); window.scrollTo(0, 0); }
 function A({href, children, ...props}) { return <a href={href} {...props} onClick={(e) => {props.onClick?.(e); if(!e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey){e.preventDefault();navigate(href);}}}>{children}</a>; }
@@ -71,17 +71,17 @@ function Landing({user, site}) {return <div className="platform-page">
     <div className="hero-preview"><div className="hero-preview-top">PRÉVIA DA EXPERIÊNCIA <span>● ao vivo</span></div><img alt="Foto do prato de frango e abacate usado no cardápio de demonstração" src="/fotos/frango.jpg"/><div className="hero-preview-bottom"><span>Explore cada detalhe</span><strong>Visualização 3D + AR</strong></div></div>
   </section>
   <section className="features"><div><span>01 / RESTAURANTE</span><h3>Seu cardápio, sua marca</h3><p>Cadastre produtos, preços, categorias, fotografias, redes sociais e número do WhatsApp. Publique ou pause itens sem depender de suporte.</p></div><div><span>02 / PRODUÇÃO AR</span><h3>Da foto para o modelo</h3><p>Envie as fotos de referência e solicite a criação de um modelo 3D. Nossa equipe trabalha com prazo de referência de até 7 dias.</p></div><div><span>03 / CONSUMIDOR</span><h3>Pedido sem complicação</h3><p>Seu cliente visualiza, monta o carrinho e abre a mensagem completa no WhatsApp do estabelecimento.</p></div></section>
-  <div className="landing-bottom"><p>Três experiências integradas: plataforma, painel do estabelecimento e cardápio para consumidores.</p><GoGoogle user={user}>{user ? 'Abrir painel' : 'Começar com Google'}</GoGoogle></div>
+  <div className="landing-bottom"><p>Crie seu cardápio digital, encante seus clientes e receba pedidos com praticidade.</p><GoGoogle user={user}>{user ? 'Abrir painel' : 'Começar com Google'}</GoGoogle></div>
 </div>;}
-function Login({user, site}) {return <div className="platform-page"><SiteHeader brand={site.name || 'Mesa Imersiva'} user={user}/><section className="login-wrap"><div className="login-card"><div className="eyebrow">ACESSO AO ESTABELECIMENTO</div><h1>Entre para criar seu cardápio.</h1><p>Use sua conta Google para administrar seus restaurantes, enviar referências e acompanhar os modelos 3D solicitados.</p><GoGoogle user={user}/><div className="login-divider">Segurança do Firebase Authentication</div><p className="subtle">O consumidor não precisa criar conta. O administrador da plataforma possui uma permissão separada, não obtida pelo cadastro comum.</p></div></section></div>;}
+function Login({user, site}) {return <div className="platform-page"><SiteHeader brand={site.name || 'Mesa Imersiva'} user={user}/><section className="login-wrap"><div className="login-card"><div className="eyebrow">ACESSO AO ESTABELECIMENTO</div><h1>Entre para criar seu cardápio.</h1><p>Entre com Google para cadastrar seu estabelecimento, organizar os produtos e acompanhar solicitações de modelos 3D.</p><GoGoogle user={user}/><div className="login-divider">Acesso protegido pela sua conta Google</div><p className="subtle">Seu estabelecimento, produtos e cardápio reunidos em um só lugar. Seus clientes não precisam criar conta para fazer pedidos.</p></div></section></div>;}
 function Consumer({rid, demo}) {
   const [r, state] = useRestaurant(demo ? null : rid);
   const [prods, error] = useProducts(demo ? null : rid, true);
   const [models] = useLive('modelCatalog');
   const [sample, setSample] = useState(null);
   useEffect(() => {if (demo) loadCatalog().then(s => setSample({r:{...s.RESTAURANT, instagram:'diemsociety', instagramName:'Diem Society', instagramBio:'Novidades, combos e bastidores', whatsapp:''}, p:s.PRODUCTS.map(p=>({...p,url:''})),c:s.CATEGORIES})).catch(()=>setSample({error:'Catálogo da demo não encontrado.'}));}, [demo]);
-  if (demo) return sample?.r ? <><div className="demo-ribbon"><A href="/">← Plataforma</A> Prévia: modelos 3D não foram incluídos no ZIP original</div><Menu restaurant={sample.r} products={sample.p} categories={sample.c}/></> : <Busy>{sample?.error || 'Abrindo demonstração…'}</Busy>;
-  if (!configured) return <Busy>Configure o Firebase para carregar cardápios publicados.</Busy>;
+  if (demo) return sample?.r ? <><div className="demo-ribbon"><A href="/">← Início</A> Você está explorando um cardápio de demonstração</div><Menu restaurant={sample.r} products={sample.p} categories={sample.c}/></> : <Busy>{sample?.error || 'Abrindo demonstração…'}</Busy>;
+  if (!configured) return <Busy>Não foi possível carregar o cardápio no momento. Tente novamente mais tarde.</Busy>;
   if (state === 'loading') return <Busy/>;
   if (!r || !r.published) return <Busy>Este cardápio não está publicado ou não existe. <A href="/">Voltar</A></Busy>;
   const mapped = prods.map(p => ({...p,url:(models.find(m=>m.id===p.modelId && m.active)?.url || ''), photo:p.photo || '', ingredients:Array.isArray(p.ingredients)?p.ingredients:[], cat:p.cat || 'Outros', price:Number(p.price || 0), diameter:Number(p.diameter || .2), kcal:Number(p.kcal || 0)}));
@@ -100,14 +100,14 @@ function ProductEditor({rid, product, onClose}) {
       const images = [];
       for (const file of Array.from(files).slice(0, isReference ? MAX_REFERENCE_PHOTOS : 1)) images.push((await uploadMedia(rid,file)).url);
       if(isReference) setFields(f=>({...f,referencePhotos:[...f.referencePhotos,...images].slice(0,MAX_REFERENCE_PHOTOS)})); else set('photo',images[0]);
-      setOk('Imagem convertida para WebP 512×512 Base64. Clique em Salvar para gravar no Realtime Database.');
+      setOk('Foto preparada com sucesso! Toque em Salvar produto para concluir.');
     } catch(e){setError(errText(e));}finally{setBusy(false);}
   };
   const save = async(e) => {
     e.preventDefault();setBusy(true);setError('');setOk('');
     try {
-      if (fields.photo && fields.photo.length > MAX_BASE64_CHARS) throw Error('Foto principal ultrapassa o limite Base64.');
-      if (fields.referencePhotos.some(url=>url?.length > MAX_BASE64_CHARS)) throw Error('Uma das fotos de referência está acima do limite.');
+      if (fields.photo && fields.photo.length > MAX_BASE64_CHARS) throw Error('A foto é muito grande. Tente outra imagem.');
+      if (fields.referencePhotos.some(url=>url?.length > MAX_BASE64_CHARS)) throw Error('Uma das fotos enviadas é muito grande. Tente outra imagem.');
       if(!fields.name.trim()) throw Error('Informe o nome do produto.');
       const price=Number(fields.price), diameter=Number(fields.diameter);
       if (!Number.isFinite(price) || price < 0 || price > 100000) throw Error('Preço inválido.');
@@ -125,11 +125,11 @@ function ProductEditor({rid, product, onClose}) {
     <label>Diâmetro real estimado (metros)<input type="number" min="0.05" max="2" step="0.01" value={fields.diameter} onChange={e=>set('diameter',e.target.value)}/></label><label>Emoji do prato<input maxLength={10} value={fields.emoji} onChange={e=>set('emoji',e.target.value)}/></label>
     <label className="span-2">Ingredientes (um por linha)<textarea rows={3} value={fields.ingredients} onChange={e=>set('ingredients',e.target.value)}/></label>
     <label className="span-2">Mensagem de convite em AR<input maxLength={200} value={fields.prompt} onChange={e=>set('prompt',e.target.value)}/></label>
-    <label>Foto principal (512×512 WebP Base64 no Realtime)<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files)}/></label><label>Fotos de referência (máximo 5, 512×512)<input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files, true)}/></label>
+    <label>Foto principal do produto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files)}/></label><label>Fotos para solicitar modelo 3D (até 5)<input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files, true)}/></label>
     {fields.photo && <img className="preview-pic" src={fields.photo} alt="Foto principal"/>}{fields.referencePhotos.length>0 && <div className="ref-photos">{fields.referencePhotos.map((url,i)=><div key={url}><img src={url} alt={`Referência ${i+1}`}/><button type="button" onClick={()=>set('referencePhotos',fields.referencePhotos.filter(x=>x!==url))}>Remover</button></div>)}</div>}
     <label className="span-2">Modelo 3D disponível no catálogo<select value={fields.modelId||''} onChange={e=>set('modelId',e.target.value)}><option value="">Nenhum modelo — solicitar produção</option>{models.filter(m=>m.active).map(m=><option key={m.id} value={m.id}>{m.name} · {m.category||'Geral'}</option>)}</select></label>
     <label className="checkbox-line span-2"><input type="checkbox" checked={fields.active} onChange={e=>set('active',e.target.checked)}/> Disponível no cardápio</label>
-    {product?.modelStatus && product.modelStatus!=='none' && <p className="subtle span-2">Modelo 3D: {product.modelStatus==='delivered'?'entregue':'em produção'} — somente o gestor da plataforma altera o arquivo GLB.</p>}
+    {product?.modelStatus && product.modelStatus!=='none' && <p className="subtle span-2">Modelo 3D: {product.modelStatus==='delivered'?'entregue':'em produção'}.</p>}
     <div className="span-2"><Notice error={error} ok={ok}/><button disabled={busy} className="p-btn p-primary" type="submit">{busy?'Processando…':'Salvar produto'}</button></div>
   </form></section></div>;
 }
@@ -144,14 +144,14 @@ function RestaurantSettings({r}) {
     await updateDoc(restaurantDoc(r.id),{name:f.name.trim().slice(0,90),tagline:f.tagline.trim().slice(0,250),whatsapp, instagram:cleanHandle(f.instagram),instagramName:f.instagramName.trim().slice(0,90),instagramBio:f.instagramBio.trim().slice(0,250),niche:(f.niche||'').trim().slice(0,80),address:(f.address||'').trim().slice(0,240),published:!!f.published,cover:f.cover || '',logo:f.logo || '',updatedAt:now()});
     setOk('Configurações salvas.');
   }catch(e){setError(errText(e));}finally{setBusy(false);}};
-  const cover = async (file, field='cover')=>{if(!file)return;setBusy(true);setError('');try{const {url} = await uploadMedia(r.id,file);setF(v=>({...v,[field]:url}));setOk('Imagem convertida para Base64. Clique em Salvar para gravar no Realtime Database.');}catch(e){setError(errText(e));}finally{setBusy(false);}};
+  const cover = async (file, field='cover')=>{if(!file)return;setBusy(true);setError('');try{const {url} = await uploadMedia(r.id,file);setF(v=>({...v,[field]:url}));setOk('Foto pronta! Toque em Salvar estabelecimento para concluir.');}catch(e){setError(errText(e));}finally{setBusy(false);}};
   return <form className="panel p-form" onSubmit={save}><h2>Configurações do estabelecimento</h2><div className="form-grid">
     <label>Nome do restaurante<input required value={f.name||''} onChange={e=>setF({...f,name:e.target.value})}/></label><label>WhatsApp com DDI (55)<input required placeholder="5511999999999" value={f.whatsapp||''} onChange={e=>setF({...f,whatsapp:e.target.value})}/></label>
     <label>Nicho / tipo do estabelecimento<input maxLength={80} placeholder="Hamburgueria, pizzaria, cafeteria…" value={f.niche||''} onChange={e=>setF({...f,niche:e.target.value})}/></label><label>Endereço (opcional)<input maxLength={240} value={f.address||''} onChange={e=>setF({...f,address:e.target.value})}/></label>
     <label className="span-2">Descrição do restaurante<textarea rows={2} value={f.tagline||''} onChange={e=>setF({...f,tagline:e.target.value})}/></label>
     <label>Instagram (@ sem URL)<input value={f.instagram||''} placeholder="meurestaurante" onChange={e=>setF({...f,instagram:e.target.value})}/></label><label>Nome no card do Instagram<input value={f.instagramName||''} onChange={e=>setF({...f,instagramName:e.target.value})}/></label>
     <label className="span-2">Bio do card Instagram<textarea rows={2} value={f.instagramBio||''} onChange={e=>setF({...f,instagramBio:e.target.value})}/></label>
-    <label>Foto da capa (512×512 Base64)<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo (512×512 Base64)<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
+    <label>Foto da capa<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
     {f.logo && <img className="preview-pic" alt="Logotipo" src={f.logo}/>}
     <label className="checkbox-line span-2"><input type="checkbox" checked={!!f.published} onChange={e=>setF({...f,published:e.target.checked})}/> Publicar cardápio para visitantes</label>
   </div><Notice error={error} ok={ok}/><button className="p-btn p-primary" disabled={busy}>{busy?'Salvando…':'Salvar estabelecimento'}</button></form>;
@@ -171,7 +171,7 @@ function RestaurantPanel({rid,user,admin}) {
     if(!window.confirm(`Solicitar modelo 3D de "${p.name}"? Prazo de referência: até 7 dias.`))return;
     setBusy(true);setNotice('');try {
       await addDoc(requestCollection(),{restaurantId:rid,ownerUid:r.ownerUid,productId:p.id,productName:p.name,note:'Produção de modelo AR a partir das fotos de referência anexadas ao produto.',status:'pending',createdAt:now(),updatedAt:now()});
-      setNotice('Solicitação enviada para a fila do gestor. Previsão: até 7 dias.');
+      setNotice('Solicitação recebida! Nossa equipe analisará as fotos. Prazo previsto: até 7 dias.');
     }catch(e){setNotice(errText(e));}finally{setBusy(false);}
   };
   const remove=async(p)=>{if(!window.confirm(`Excluir permanentemente "${p.name}" do cardápio?`))return;try{await deleteDoc(productDoc(rid,p.id));}catch(e){setNotice(errText(e));}};
@@ -180,17 +180,17 @@ function RestaurantPanel({rid,user,admin}) {
     <div className="share-strip"><div><small>Link do cardápio</small><code>{url}</code></div><button onClick={()=>{navigator.clipboard?.writeText(url);setNotice('Link copiado.');}}>Copiar</button></div>
     <div className="tabbar"><button className={tab==='items'?'active':''} onClick={()=>setTab('items')}>Produtos ({products.length})</button><button className={tab==='requests'?'active':''} onClick={()=>setTab('requests')}>Solicitações AR ({myRequests.length})</button><button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}>Estabelecimento</button></div>
     {tab==='items' && <section className="panel"><div className="panel-head"><div><h2>Seu cardápio</h2><p>Gerencie fotos, informações e disponibilidade.</p></div><button className="p-btn p-primary" onClick={()=>setEditing(null)}>+ Novo item</button></div><Notice error={error} ok={notice}/>{products.length? <div className="item-list">{products.map(p=><div className="item-entry" key={p.id}><div className="item-image">{p.photo?<img src={p.photo} alt=""/>:p.emoji||'🍽️'}</div><div className="item-text"><strong>{p.name}</strong><span>{p.cat} · {BRL(p.price)}</span><small>{p.active?'Ativo':'Oculto'} · {models.some(m=>m.id===p.modelId && m.active)?'3D disponível':'Sem modelo 3D'}</small></div><div className="item-buttons"><button onClick={()=>setEditing(p)}>Editar</button><button disabled={busy || models.some(m=>m.id===p.modelId && m.active)} onClick={()=>askModel(p)}>Solicitar AR</button><button className="danger" onClick={()=>remove(p)}>Excluir</button></div></div>)}</div>:<p className="empty">Nenhum item cadastrado. Comece pelo primeiro prato.</p>}</section>}
-    {tab==='requests' && <section className="panel"><h2>Solicitações de modelos AR</h2><p className="subtle">Os pedidos aparecem aqui e no painel do gestor, com previsão de até 7 dias para produção. A entrega depende da qualidade das fotos e da análise do serviço.</p><Notice error={reqError}/>{myRequests.length?myRequests.map(q=><div className="request-row" key={q.id}><div><strong>{q.productName}</strong><small>{q.createdAt ? new Date(q.createdAt).toLocaleDateString('pt-BR') : 'Enviado agora'}</small></div><span className="status-tag">{{pending:'Recebido',in_progress:'Em produção',delivered:'Entregue',rejected:'Precisa de revisão'}[q.status]||q.status}</span></div>):<p className="empty">Você ainda não solicitou modelos.</p>}</section>}
+    {tab==='requests' && <section className="panel"><h2>Solicitações de modelos AR</h2><p className="subtle">Acompanhe aqui as etapas de produção. O prazo previsto é de até 7 dias, sujeito à análise das fotos enviadas.</p><Notice error={reqError}/>{myRequests.length?myRequests.map(q=><div className="request-row" key={q.id}><div><strong>{q.productName}</strong><small>{q.createdAt ? new Date(q.createdAt).toLocaleDateString('pt-BR') : 'Enviado agora'}</small></div><span className="status-tag">{{pending:'Recebido',in_progress:'Em produção',delivered:'Entregue',rejected:'Precisa de revisão'}[q.status]||q.status}</span></div>):<p className="empty">Você ainda não solicitou modelos.</p>}</section>}
     {tab==='settings' && <RestaurantSettings r={r}/>}
   </div>{editing!==undefined && <ProductEditor rid={rid} product={editing} onClose={()=>setEditing(undefined)}/>}</div>;
 }
 function Overview({user,admin}) {
-  const [restaurants,error]=useLive('restaurants',admin?null:['ownerUid','==',user.uid]);
+  const [restaurants,error]=useLive('restaurants',['ownerUid','==',user.uid]);
   const [name,setName]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const create=async(e)=>{e.preventDefault();if(!name.trim())return;setBusy(true);setNotice('');try{
     const d=await addDoc(collection(db,'restaurants'),{ownerUid:user.uid,name:name.trim().slice(0,90),tagline:'Conheça nosso cardápio em 3D.',whatsapp:'',instagram:'',instagramName:'',instagramBio:'',niche:'',address:'',cover:'',logo:'',published:false,createdAt:now(),updatedAt:now()});navigate(`/painel/restaurante/${d.id}`);
   }catch(e){setNotice(errText(e));}finally{setBusy(false);}};
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">ÁREA DO ESTABELECIMENTO</div><h1>Olá, {user.displayName?.split(' ')[0] || 'bem-vindo'}.</h1><p>Organize seus estabelecimentos e os modelos AR.</p></div><button className="p-btn p-outline" onClick={()=>signOut(auth)}>Sair</button></div>{admin && <A href="/gestor" className="admin-link">◈ Abrir administração geral da plataforma</A>}<section className="panel"><h2>Seus restaurantes</h2><Notice error={error}/>{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado':'Não publicado'}</p></div><A href={`/painel/restaurante/${r.id}`} className="p-btn p-outline">Gerenciar →</A></div>)}{!restaurants.some(r=>r.ownerUid===user.uid)&&<p className="empty">Nenhum restaurante cadastrado.</p>}</section><form className="panel create-rest" onSubmit={create}><h2>Adicionar estabelecimento</h2><p className="subtle">Cada restaurante recebe seu próprio endereço, produtos e painel.</p><div><input required maxLength={90} placeholder="Nome do restaurante" value={name} onChange={e=>setName(e.target.value)}/><button className="p-btn p-primary" disabled={busy}>{busy?'Criando…':'+ Criar restaurante'}</button></div><Notice error={notice}/></form></div></div>;
+  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">ÁREA DO ESTABELECIMENTO</div><h1>Olá, {user.displayName?.split(' ')[0] || 'bem-vindo'}.</h1><p>Organize seus estabelecimentos e os modelos AR.</p></div><button className="p-btn p-outline" onClick={()=>signOut(auth)}>Sair</button></div><section className="panel"><h2>Seus restaurantes</h2><Notice error={error}/>{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado':'Não publicado'}</p></div><A href={`/painel/restaurante/${r.id}`} className="p-btn p-outline">Gerenciar →</A></div>)}{!restaurants.some(r=>r.ownerUid===user.uid)&&<p className="empty">Nenhum restaurante cadastrado.</p>}</section><form className="panel create-rest" onSubmit={create}><h2>Adicionar estabelecimento</h2><p className="subtle">Cada restaurante recebe seu próprio endereço, produtos e painel.</p><div><input required maxLength={90} placeholder="Nome do restaurante" value={name} onChange={e=>setName(e.target.value)}/><button className="p-btn p-primary" disabled={busy}>{busy?'Criando…':'+ Criar restaurante'}</button></div><Notice error={notice}/></form></div></div>;
 }
 function PlatformEditor({site}) {
   const [f,setF]=useState({...site}),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -217,14 +217,14 @@ function ModelCatalogAdmin({models}) {
   const [name,setName]=useState(''),[category,setCategory]=useState(''),[url,setUrl]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
   const save=async(e)=>{e.preventDefault();setBusy(true);setNotice('');try{
     const u=new URL(url.trim());
-    if(u.protocol!=='https:' || !u.pathname.toLowerCase().endsWith('.glb')) throw Error('Use URL HTTPS direta terminando em .glb. GitHub Pages é aceito.');
+    if(u.protocol!=='https:' || !u.pathname.toLowerCase().endsWith('.glb')) throw Error('Informe um link HTTPS direto para o arquivo .glb.');
     if(!name.trim())throw Error('Informe o nome.');
     await addDoc(collection(db,'modelCatalog'),{name:name.trim().slice(0,120),category:category.trim().slice(0,80),url:u.href,active:true,createdAt:now(),updatedAt:now()});
     setName('');setUrl('');setNotice('Modelo publicado no catálogo global.');
   }catch(e){setNotice(errText(e));}finally{setBusy(false);}};
   const toggle=async(m)=>{try{await updateDoc(doc(db,'modelCatalog',m.id),{active:!m.active,updatedAt:now()});}catch(e){setNotice(errText(e));}};
-  return <section className="panel"><h2>Biblioteca global de modelos 3D</h2><p className="subtle">Somente o gestor adiciona URLs GLB. Os restaurantes escolhem os modelos ativos nos seus produtos. Use link direto de GitHub Pages, com CORS habilitado.</p>
-    <form className="p-form" onSubmit={save}><label>Nome do modelo<input required value={name} onChange={e=>setName(e.target.value)}/></label><label>Categoria<input value={category} onChange={e=>setCategory(e.target.value)}/></label><label>URL direta HTTPS (.glb)<input required type="url" placeholder="https://usuario.github.io/repositorio/models/prato.glb" value={url} onChange={e=>setUrl(e.target.value)}/></label><button disabled={busy} className="p-btn p-primary">Adicionar à biblioteca</button></form><Notice error={notice}/>
+  return <section className="panel"><h2>Biblioteca global de modelos 3D</h2><p className="subtle">Somente o gestor adiciona URLs GLB. Os restaurantes escolhem os modelos ativos nos seus produtos. Os links precisam ser públicos e compatíveis com o visualizador.</p>
+    <form className="p-form" onSubmit={save}><label>Nome do modelo<input required value={name} onChange={e=>setName(e.target.value)}/></label><label>Categoria<input value={category} onChange={e=>setCategory(e.target.value)}/></label><label>URL direta HTTPS (.glb)<input required type="url" placeholder="https://exemplo.com/modelos/prato.glb" value={url} onChange={e=>setUrl(e.target.value)}/></label><button disabled={busy} className="p-btn p-primary">Adicionar à biblioteca</button></form><Notice error={notice}/>
     {models.map(m=><div className="restaurant-entry" key={m.id}><div><strong>{m.name}</strong><p>{m.category||'Geral'} · ID: <code>{m.id}</code></p><a href={m.url} target="_blank" rel="noopener noreferrer">Abrir GLB</a></div><button onClick={()=>toggle(m)}>{m.active?'Desativar':'Ativar'}</button></div>)}
   </section>;
 }
@@ -257,11 +257,9 @@ function Admin({user,site}) {
 const defaults = {name:'Mesa Imersiva',headline:'Uma experiência que começa antes da primeira garfada.',description:'Transforme o cardápio em uma experiência: modelos 3D, realidade aumentada e pedidos pelo WhatsApp.'};
 function Root() {
   const [path,setPath]=useState(location.pathname),[user,setUser]=useState(undefined),[admin,setAdmin]=useState(false),[site,setSite]=useState(defaults);
-  const [authError,setAuthError]=useState('');
   useEffect(()=>{const fn=()=>setPath(location.pathname);window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn)},[]);
   useEffect(()=>{
     if (!auth) {setUser(null);return;}
-    getRedirectResult(auth).catch(e=>setAuthError(errText(e)));
     return onAuthStateChanged(auth,async(u)=>{
       setUser(u);if(u){try{const t=await u.getIdTokenResult();setAdmin(t.claims.platformAdmin===true);}catch{setAdmin(false);}}else setAdmin(false);
     });
@@ -269,12 +267,12 @@ function Root() {
   useEffect(()=>{if(!db)return;return onSnapshot(doc(db,'settings','site'),s=>{if(s.exists())setSite({...defaults,...s.data()});},()=>{});},[]);
   if(path==='/menu/demo') return <Consumer demo/>;
   if(path.startsWith('/menu/'))return <Consumer rid={path.split('/')[2]}/>;
-  if(path==='/entrar')return <><Login user={user} site={site}/><Notice error={authError}/></>;
+  if(path==='/entrar')return <Login user={user} site={site}/>;
   if(path==='/painel' || path.startsWith('/painel/') || path==='/gestor'){
-    if(!configured)return <Busy>O Firebase ainda precisa ser configurado. Veja o README do pacote e configure o arquivo .env.</Busy>;
+    if(!configured)return <Busy>O serviço está temporariamente indisponível. Tente novamente mais tarde.</Busy>;
     if(user===undefined)return <Busy>Validando sessão…</Busy>;
     if(!user)return <Login user={null} site={site}/>;
-    if(path==='/gestor')return admin?<Admin user={user} site={site}/>:<Busy>Acesso restrito ao gestor da plataforma.</Busy>;
+    if(path==='/gestor')return admin?<Admin user={user} site={site}/>:<Busy>Você não tem permissão para acessar esta página.</Busy>;
     if(path.startsWith('/painel/restaurante/'))return <RestaurantPanel key={path} rid={path.split('/')[3]} user={user} admin={admin}/>;
     return <Overview user={user} admin={admin}/>;
   }
