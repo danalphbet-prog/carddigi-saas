@@ -572,3 +572,6 @@ export function Menu({ restaurant = RESTAURANT, products = PRODUCTS, categories 
 }
 
 
+
+// Reutilizados pelo cardápio Savor; preserva renderização GLB e sessão WebXR da V5.
+export { Viewer, ARSession };

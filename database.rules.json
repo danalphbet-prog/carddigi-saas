@@ -61,6 +61,9 @@
             },
             "url": {
               ".validate": false
+            },
+            "stock": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
             }
           }
         },

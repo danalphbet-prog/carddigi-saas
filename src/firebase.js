@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { getDatabase, ref, push, set, update, remove, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
@@ -58,3 +58,18 @@ export const restaurantDoc=rid=>doc(db,'restaurants',rid);
 export const productCollection=rid=>collection(db,'restaurants',rid,'products');
 export const productDoc=(rid,pid)=>doc(db,'restaurants',rid,'products',pid);
 export const requestCollection=()=>collection(db,'modelRequests');
+
+export async function loginEmail(email,password) {
+  if (!auth) throw Error('Serviço de acesso indisponível.');
+  await setPersistence(auth,browserLocalPersistence);
+  return signInWithEmailAndPassword(auth,email.trim(),password);
+}
+export async function registerEmail(email,password) {
+  if (!auth) throw Error('Serviço de acesso indisponível.');
+  await setPersistence(auth,browserLocalPersistence);
+  return createUserWithEmailAndPassword(auth,email.trim(),password);
+}
+export async function recoverPassword(email) {
+  if (!auth) throw Error('Serviço de acesso indisponível.');
+  return sendPasswordResetEmail(auth,email.trim());
+}

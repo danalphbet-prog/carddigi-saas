@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Savor • Cardápio Digital</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+
+<style>
+/* =========================================================
+   TOKENS (troque por restaurante)
+   ========================================================= */
+:root {
+  --brand-dark: #5C3F2B;
+  --cream: #F7F2EA;
+  --cream-deep: #EFE7DB;
+  --olive: #3E4A2B;
+  --olive-hover: #334020;
+  --accent: #D4623B;
+  --accent-hover: #B94F2A;
+  --text: #1F1A17;
+  --muted: #7A6F66;
+  --white: #FFFFFF;
+  --badge: #E8553A;
+  --cta-circle: #2A1E16;
+  --line: #DCD3C7;
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'Poppins', system-ui, -apple-system, sans-serif;
+
+  --r-sheet: 28px;
+  --r-card: 16px;
+  --r-img: 12px;
+  --shadow: 0 4px 12px rgba(0,0,0,0.08);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* =========================================================
+   BASE
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background: #4A3323;
+  -webkit-font-smoothing: antialiased;
+}
+button, a { font: inherit; color: inherit; text-decoration: none; border: none; background: none; cursor: pointer; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lucide { width: 20px; height: 20px; stroke-width: 1.8; }
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+/* Container do app: tela única, centralizada em telas grandes */
+#app {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  margin: 0 auto;
+  background: var(--cream);
+  overflow: hidden;
+}
+@media (min-width: 500px) {
+  body { padding: 0; }
+  #app { height: 100dvh; border-radius: 0; box-shadow: none; }
+}
+
+/* Views: uma por rota, empilhadas, com transição */
+.view {
+  position: absolute; inset: 0;
+  overflow-y: auto;
+  background: var(--cream);
+  animation: viewIn .35s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Placeholder (splash) */
+.img-box { position: relative; overflow: hidden; background: linear-gradient(135deg, #8B6B52, #3B2A1E); }
+.img-box img { position: absolute; inset: 0; }
+.img-box.img-missing img { display: none; }
+.img-box.img-missing::after {
+  content: attr(data-label);
+  position: absolute; inset: 0; display: grid; place-items: center;
+  padding: 8px; text-align: center;
+  font-size: 40px;
+}
+
+/* Tipografia */
+.eyebrow { font-size: 10px; letter-spacing: .15em; text-transform: uppercase; line-height: 1.5; }
+.serif { font-family: var(--font-display); font-weight: 500; }
+
+/* Botões base */
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--white); color: var(--text);
+  box-shadow: var(--shadow);
+  display: grid; place-items: center; position: relative;
+  transition: transform .15s ease;
+  flex-shrink: 0;
+}
+.icon-btn:active { transform: scale(.96); }
+.dot-badge {
+  position: absolute; top: 2px; right: 2px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--badge); border: 1.5px solid var(--white);
+}
+.count-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+  background: var(--badge); color: var(--white);
+  font-size: 10px; font-weight: 600; border: 1.5px solid var(--white);
+  display: grid; place-items: center;
+}
+.count-badge.zero { display: none; }
+
+/* =========================================================
+   HOME
+   ========================================================= */
+.home { color: var(--white); background: var(--brand-dark); display: block; overflow-y:auto; overscroll-behavior-y:contain; }
+.hero { position: relative; isolation:isolate; min-height: clamp(470px, 67dvh, 750px); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: calc(122px + var(--safe-top)) 20px 76px; }
+.home .hero-bg { position: absolute; inset: 0; z-index:-2; }
+.home .hero-bg img { object-position: center 40%; }
+.home .hero-shade {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(30,20,15,.25) 0%, rgba(30,20,15,.85) 100%);
+}
+.home-top {
+  position: absolute; top: calc(24px + var(--safe-top)); left: 20px; right: 20px;
+  display: flex; justify-content: space-between; align-items: flex-start; z-index: 2;
+}
+.logo { font-family: var(--font-display); font-weight: 500; font-size: 28px; }
+.home-top .eyebrow { margin-top: 6px; color: rgba(255,255,255,.85); }
+.top-actions { display: flex; gap: 12px; align-items: center; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--white); }
+.home .icon-btn { width: 40px; height: 40px; }
+
+.hero-text { position: relative; z-index: 2; }
+.hero-title { font-family: var(--font-display); font-weight: 500; font-size: 40px; line-height: 1.1; }
+.hero-text p { margin-top: 16px; max-width: 260px; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,.9); }
+
+.cta {
+  margin-top: 24px; height: 48px; width: 200px; padding: 0 6px 0 20px;
+  border-radius: 999px; background: var(--accent); color: var(--white);
+  font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 8px 20px rgba(212,98,59,.35);
+  transition: transform .15s ease, background .2s ease;
+}
+.cta:hover { background: var(--accent-hover); }
+.cta:active { transform: scale(.97); }
+.cta-arrow {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--cta-circle); display: grid; place-items: center;
+}
+.cta-arrow .lucide { width: 16px; height: 16px; }
+
+.sheet {
+  position: relative; margin-top: -30px; z-index: 3; min-height: 280px;
+  background: var(--cream); color: var(--text);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  padding: 10px 20px calc(20px + var(--safe-bottom));
+  overflow-y: auto;
+}
+.sheet-handle { width: 36px; height: 4px; border-radius: 4px; background: #CFC6BA; margin: 0 auto 16px; }
+
+.quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); justify-items: center; gap: 8px; }
+.action-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 11px; }
+.action-circle {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--white); box-shadow: var(--shadow);
+  display: grid; place-items: center; transition: transform .15s ease;
+}
+.action-tile:active .action-circle { transform: scale(.96); }
+.action-tile.active .action-circle { background: var(--olive); color: var(--white); }
+
+.info-cards { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.info-card {
+  position: relative; display: flex; flex-direction: column; text-align: left;
+  background: var(--white); border-radius: var(--r-card); box-shadow: var(--shadow);
+  padding: 8px 8px 12px; transition: transform .15s ease;
+}
+.info-card:active { transform: scale(.98); }
+.info-card .thumb { height: 60px; border-radius: var(--r-img); overflow: hidden; margin-bottom: 10px; }
+.info-card h3 { font-size: 14px; font-weight: 600; padding: 0 4px; }
+.info-card p { font-size: 11px; color: var(--muted); line-height: 1.4; padding: 2px 36px 0 4px; min-height: 30px; }
+.go-btn {
+  position: absolute; right: 10px; bottom: 10px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--cream-deep); display: grid; place-items: center;
+}
+.go-btn .lucide { width: 14px; height: 14px; }
+
+/* =========================================================
+   CARDÁPIO
+   ========================================================= */
+.menu-header {
+  position: relative; z-index: 0; isolation: isolate; height: 250px; color: var(--white);
+  background: var(--brand-dark); overflow: hidden;
+}
+.menu-header .img-box { position: absolute; inset: 0; }
+.menu-header .shade {
+  position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(30,20,15,.42) 0%, rgba(30,20,15,.62) 50%, rgba(30,20,15,.9) 100%);
+  pointer-events:none;
+}
+.menu-top {
+  position: absolute; top: calc(16px + var(--safe-top)); left: 16px; right: 16px;
+  display: flex; justify-content: space-between; z-index: 2;
+}
+.menu-headline { position: absolute; left: 20px; bottom: 44px; z-index: 2; }
+.menu-headline .eyebrow { color: rgba(255,255,255,.85); }
+.menu-headline h1 { font-family: var(--font-display); font-weight: 500; font-size: 36px; margin-top: 8px; }
+
+.menu-body {
+  position: relative; z-index: 2; margin-top: -28px; background: var(--cream);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  padding: 24px 20px calc(28px + var(--safe-bottom)); min-height: 60%;
+  box-shadow: 0 -4px 16px rgba(30,20,15,.04);
+}
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -20px 20px; padding: 0 20px; }
+.chip {
+  flex-shrink: 0; height: 36px; padding: 0 18px; border-radius: 999px;
+  background: var(--cream-deep); color: var(--text); font-size: 13px;
+  transition: background .25s ease, color .25s ease, transform .15s ease;
+}
+.chip:active { transform: scale(.97); }
+.chip.active { background: var(--olive); color: var(--white); font-weight: 600; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card {
+  position: relative; aspect-ratio: .85; border-radius: var(--r-card); overflow: hidden;
+  color: var(--white); cursor: pointer;
+  transition: transform .2s ease, opacity .25s ease;
+  animation: viewIn .4s ease both;
+}
+.card:active { transform: scale(.98); }
+.card.hidden { display: none; }
+.card .img-box { position: absolute; inset: 0; }
+.card::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 40%; z-index: 1;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.75) 100%);
+}
+.card-info { position: absolute; left: 12px; right: 52px; bottom: 12px; z-index: 2; }
+.card-info h3 {
+  font-size: 13px; font-weight: 600; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.card-info p { font-size: 12px; opacity: .85; margin-top: 2px; }
+.card-add {
+  position: absolute; right: 10px; bottom: 10px; z-index: 2;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--white); color: var(--text); display: grid; place-items: center;
+  transition: transform .15s ease;
+}
+.card-add:active { transform: scale(.9); }
+.card-add .lucide { width: 14px; height: 14px; }
+
+/* =========================================================
+   DETALHE DO PRODUTO
+   ========================================================= */
+.detail-hero {
+  position: relative; height: clamp(300px, 42vh, 460px); overflow: hidden;
+  border-radius: 0 0 var(--r-sheet) var(--r-sheet);
+}
+.detail-hero .img-box { position: absolute; inset: 0; }
+.float-top {
+  position: absolute; top: calc(16px + var(--safe-top)); left: 16px; right: 16px;
+  display: flex; justify-content: space-between; z-index: 3;
+}
+.dots { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; gap: 6px; z-index: 2; }
+.dots span,.dots button { width: 7px; height: 7px; border-radius: 999px; background: rgba(255,255,255,.55); padding:0; }
+.dots span.on,.dots button.on { width: 22px; background: var(--white); }
+
+.detail-content { padding: 20px 20px 120px; }
+.detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.detail-head h1 { font-family: var(--font-display); font-weight: 500; font-size: 26px; line-height: 1.2; }
+.fav {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: var(--cream-deep); display: grid; place-items: center;
+  transition: transform .15s ease, color .2s ease;
+}
+.fav:active { transform: scale(.94); }
+.fav.active { color: var(--accent); }
+.fav.active svg { fill: currentColor; }
+.subtitle { margin-top: 6px; color: var(--muted); }
+.price { margin-top: 8px; font-size: 20px; font-weight: 600; }
+
+.meta { margin-top: 10px; display: flex; align-items: center; font-size: 12px; }
+.meta-item { display: flex; align-items: center; gap: 4px; padding: 0 12px; }
+.meta-item:first-child { padding-left: 0; }
+.meta-item + .meta-item { border-left: 1px solid var(--line); }
+.meta-item .lucide { width: 14px; height: 14px; color: var(--accent); }
+
+.desc { margin-top: 12px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.ingredients { margin-top: 20px; }
+.ingredients h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.ingredient-list { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 4px; }
+.ingredient {
+  flex-shrink: 0; width: 56px; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; font-size: 11px; color: var(--muted); text-align: center;
+}
+.ingredient .img-box { width: 52px; height: 52px; border-radius: 50%; }
+
+.bottom-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  background: var(--cream); padding: 12px 20px calc(16px + var(--safe-bottom));
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  box-shadow: 0 -6px 18px rgba(0,0,0,.04);
+}
+.order-row { display:flex; align-items:center; gap:16px; }
+.stepper { display: flex; align-items: center; gap: 12px; }
+.step-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #CFC6BA;
+  display: grid; place-items: center; transition: transform .15s ease;
+}
+.step-btn:active { transform: scale(.94); }
+.step-btn .lucide { width: 16px; height: 16px; }
+.qty { font-size: 16px; font-weight: 600; min-width: 16px; text-align: center; }
+.add-btn {
+  flex: 1; height: 56px; padding: 0 20px; border-radius: 999px;
+  background: var(--olive); color: var(--white); font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: transform .15s ease, background .2s ease;
+}
+.ar-btn { width:100%; min-height:52px; border-radius:999px; display:flex; align-items:center; justify-content:center; gap:11px; background:var(--accent); color:#fff; font-weight:600; font-size:14px; }
+.ar-btn:hover { background:var(--accent-hover); }
+.ar-btn .lucide {width:20px;height:20px}
+.view.detail .detail-content {padding-bottom:210px}
+.ar-preview {position:relative; height:min(48dvh,400px); min-height:240px; background:#201d19; border-radius:18px; overflow:hidden; margin-top:12px; display:grid;place-items:center}
+.ar-preview video {width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.ar-preview .ar-target {position:relative;z-index:2;color:white;border:1px dashed rgba(255,255,255,.75);width:110px;height:110px;border-radius:50%;display:grid;place-items:center;font-size:40px;text-shadow:0 2px 15px #0009;pointer-events:none}
+.ar-preview .ar-caption {position:absolute;bottom:12px;left:12px;right:12px;z-index:3;color:white;text-align:center;background:#1119;border-radius:12px;padding:10px;font-size:12px}
+.ar-help{font-size:12px;line-height:1.6;color:var(--muted);margin-top:14px}
+.add-btn:hover { background: var(--olive-hover); }
+.add-btn:active { transform: scale(.97); }
+.add-btn .sep { width: 1px; height: 20px; background: rgba(255,255,255,.35); }
+
+/* Toast simples de confirmação */
+.toast {
+  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+  background: var(--text); color: var(--white); font-size: 13px;
+  padding: 10px 16px; border-radius: 999px; z-index: 10;
+  opacity: 0; pointer-events: none; transition: opacity .25s ease;
+}
+.toast.show { opacity: 1; }
+.sheet > * { max-width: 640px; margin-left: auto; margin-right: auto; }
+@media(min-width:800px){.hero-text,.home-top{max-width:980px}.home-top{left:max(20px,calc((100% - 980px)/2));right:max(20px,calc((100% - 980px)/2))}.hero-text{width:min(100%,980px);margin-inline:auto}.hero{min-height:65dvh}.hero-title{font-size:clamp(42px,5vw,72px)}}
+@media(max-height:740px){.hero{min-height:500px}}
+.view.detail { overflow: hidden; }
+.slide .img-box{position:absolute;inset:0}
+.slide img{object-position:center center}
+.slides{touch-action:pan-x pan-y;scroll-behavior:smooth}
+.pop{position:absolute;inset:0;z-index:50}
+.pop-panel{box-shadow:0 -12px 48px rgba(0,0,0,.14)}
+button:focus-visible,[role=button]:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+.scroller { position: absolute; inset: 0; overflow-y: auto; }
+.slides { display: flex; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; }
+.slide { flex: 0 0 100%; position: relative; scroll-snap-align: center; }
+.slide:nth-child(even) .img-missing { filter: hue-rotate(30deg); }
+.arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.85); display: grid; place-items: center; z-index: 2; }
+.arrow.l { left: 12px; } .arrow.r { right: 12px; }
+@media (hover: none) { .arrow { display: none; } }
+.dots span,.dots button { cursor: pointer; transition: width .25s, background .25s; }
+.ingredient .img-missing::after { font-size: 24px; }
+.avatar.img-missing::after { font-size: 18px; }
+.thumb.img-missing::after { font-size: 28px; }
+.pop { position: absolute; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.pop-bg { position: absolute; inset: 0; background: rgba(20,12,8,.55); opacity: 0; transition: opacity .25s; }
+.pop-panel { position: relative; width: 100%; max-width: 520px; max-height: 80%; overflow-y: auto; background: var(--cream); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 10px 20px calc(20px + var(--safe-bottom)); transform: translateY(100%); transition: transform .3s cubic-bezier(.2,.8,.2,1); color: var(--text); }
+.pop.open .pop-bg { opacity: 1; } .pop.open .pop-panel { transform: none; }
+.pop-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.pop-head h3 { font-family: var(--font-display); font-weight: 500; font-size: 22px; }
+.pop-head .icon-btn { width: 36px; height: 36px; box-shadow: none; background: var(--cream-deep); }
+.pop-item { width: 100%; display: flex; align-items: center; gap: 14px; padding: 14px 4px; border-bottom: 1px solid var(--line); font-size: 14px; text-align: left; }
+.pop-item:last-child { border-bottom: none; }
+.pop-item .lucide { color: var(--olive); }
+.pop-item em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--muted); }
+.pop-item.danger, .pop-item.danger .lucide { color: var(--badge); }
+.cart-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cart-row .em { font-size: 26px; width: 44px; height: 44px; border-radius: 12px; background: var(--cream-deep); display: grid; place-items: center; }
+.cart-row .info { flex: 1; font-size: 14px; } .cart-row small { display: block; color: var(--muted); font-size: 12px; }
+.cart-row .step-btn { width: 30px; height: 30px; }
+.cart-total { display: flex; justify-content: space-between; padding: 16px 0; font-size: 16px; }
+.empty { text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; padding: 28px 0; }
+@media (min-width: 720px) {
+  .grid { grid-template-columns: repeat(4, 1fr); }
+  .menu-body { padding-left: 40px; padding-right: 40px; }
+  .chips { margin: 0 -40px 20px; padding: 0 40px; }
+  .detail-content { max-width: 760px; margin: 0 auto; }
+}
+</style>
+</head>
+
+<body>
+<div id="app" aria-live="polite"></div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO (troque aqui)
+   Imagens: cole URLs do Unsplash, ex.: https://images.unsplash.com/photo-XXXX?w=800&q=80
+   Campo vazio = placeholder com legenda.
+   ========================================================= */
+const CONFIG = {
+  restaurant: { name: 'Savor', currency: 'USD', locale: 'en-US' },
+  images: {
+    hero: PHOTO('photo-1517248135467-4c7edcad34c4', 1200, 1400), avatar: PHOTO('photo-1534528741775-53994a69daeb', 120, 120), ambient: PHOTO('photo-1414235077428-338989a2e8c0', 1200, 500), infoMenu: PHOTO('photo-1473093295043-cdd812d0e601', 400, 250), infoRes: PHOTO('photo-1517248135467-4c7edcad34c4', 400, 250),
+    ingredients: { Salmon: '', Herbs: '', Risotto: '', Tomatoes: '', Lemon: '' }
+  },
+  categories: [
+    { id: 'all', label: 'All' },
+    { id: 'starters', label: 'Starters' },
+    { id: 'main', label: 'Main Course' },
+    { id: 'desserts', label: 'Desserts' }
+  ],
+  items: [
+    { id: 'truffle', name: 'Truffle Pasta', category: 'main', price: 22, image: PHOTO('photo-1473093295043-cdd812d0e601'), gallery: [PHOTO('photo-1473093295043-cdd812d0e601'), PHOTO('photo-1551183053-bf91a1d81141'), PHOTO('photo-1547592180-85f173990554')],
+      subtitle: 'Fresh pasta & black truffle', rating: '4.7 (210+)', time: '20-25 min', cal: '640 cal',
+      desc: 'Silky fresh pasta tossed with black truffle, parmesan cream and a touch of cracked pepper.',
+      ingredients: ['Pasta', 'Truffle', 'Parmesan', 'Cream'] },
+    { id: 'steak', name: 'Beef Steak', category: 'main', price: 28, image: PHOTO('photo-1546833999-b9f581a1996d'), gallery: [PHOTO('photo-1546833999-b9f581a1996d'), PHOTO('photo-1558030006-450675393462'), PHOTO('photo-1432139555190-58524dae6a55')],
+      subtitle: 'Grilled ribeye & roasted garlic', rating: '4.9 (410+)', time: '25-30 min', cal: '780 cal',
+      desc: 'Prime ribeye seared to order, served with roasted garlic, seasonal vegetables and red wine jus.',
+      ingredients: ['Beef', 'Garlic', 'Herbs', 'Potato'] },
+    { id: 'caesar', name: 'Caesar Salad', category: 'starters', price: 16, image: PHOTO('photo-1512621776951-a57141f2eefd'), gallery: [PHOTO('photo-1512621776951-a57141f2eefd'), PHOTO('photo-1515543904379-3d757afe72e4'), PHOTO('photo-1540420773420-3366772f4999')],
+      subtitle: 'Romaine & aged parmesan', rating: '4.5 (180+)', time: '10-15 min', cal: '380 cal',
+      desc: 'Crisp romaine, house croutons, shaved parmesan and our classic creamy Caesar dressing.',
+      ingredients: ['Romaine', 'Parmesan', 'Croutons', 'Lemon'] },
+    { id: 'lava', name: 'Chocolate Lava Cake', category: 'desserts', price: 12, image: PHOTO('photo-1606313564200-e75d5e30476c'), gallery: [PHOTO('photo-1606313564200-e75d5e30476c'), PHOTO('photo-1578985545062-69928b1d9587'), PHOTO('photo-1488477181946-6428a0291777')],
+      subtitle: 'Warm dark chocolate & berries', rating: '4.8 (260+)', time: '15-20 min', cal: '510 cal',
+      desc: 'Warm dark chocolate cake with a molten center, served with fresh berries and vanilla cream.',
+      ingredients: ['Chocolate', 'Butter', 'Berries', 'Cream'] },
+    { id: 'salmon', name: 'Grilled Salmon', category: 'main', price: 24, image: PHOTO('photo-1467003909585-2f8a72700288'), gallery: [PHOTO('photo-1467003909585-2f8a72700288'), PHOTO('photo-1519708227418-c8fd9a32b7a2'), PHOTO('photo-1476224203421-9ac39bcb3327')],
+      subtitle: 'Herb risotto & seasonal greens', rating: '4.8 (320+)', time: '25-30 min', cal: '420 cal',
+      desc: 'Perfectly grilled salmon served over creamy herb risotto with seasonal greens, roasted cherry tomatoes and a hint of lemon.',
+      ingredients: [
+        { name: 'Salmon', key: 'Salmon' }, { name: 'Herbs', key: 'Herbs' },
+        { name: 'Risotto', key: 'Risotto' }, { name: 'Tomatoes', key: 'Tomatoes' }, { name: 'Lemon', key: 'Lemon' }
+      ] }
+  ]
+};
+
+const fmt = new Intl.NumberFormat(CONFIG.restaurant.locale, { style: 'currency', currency: CONFIG.restaurant.currency });
+
+/* Imagens via API (LoremFlickr, sem chave). Para fotos melhores, troque por Unsplash/Pexels com chave. Sem rede/permissão, aparece o emoji. */
+function PHOTO(id, w = 900, h = 1000) { return 'https://images.unsplash.com/' + id + '?auto=format&fit=crop&w=' + w + '&h=' + h + '&q=82'; }
+function IMG(q, w, h, n = 1) { return 'https://loremflickr.com/' + w + '/' + h + '/' + encodeURIComponent(q) + '?lock=' + n; }
+const FOOD = { truffle: ['🍝', 'pasta,truffle'], steak: ['🥩', 'steak,beef'], caesar: ['🥗', 'caesar,salad'], lava: ['🍰', 'chocolate,cake'], salmon: ['🐟', 'salmon,fillet'] };
+const foodOf = it => FOOD[it.id] || ['🍽️', 'food'];
+const EMOJI = { Salmon: '🐟', Herbs: '🌿', Risotto: '🍚', Tomatoes: '🍅', Lemon: '🍋', Pasta: '🍝', Truffle: '🍄', Parmesan: '🧀', Cream: '🥛', Beef: '🥩', Garlic: '🧄', Potato: '🥔', Romaine: '🥬', Croutons: '🍞', Chocolate: '🍫', Butter: '🧈', Berries: '🍓' };
+const galleryOf = it => it.gallery?.length ? it.gallery : [it.image || IMG(foodOf(it)[1], 800, 900, 1)];
+const itemImg = (it, n = 1, w = 600, h = 700) => galleryOf(it)[n - 1] || galleryOf(it)[0];
+document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentElement) t.parentElement.classList.add('img-missing'); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+/* ---------- Popups (bottom sheet) ---------- */
+function openSheet(title, body, instant) {
+  closeSheet();
+  const el = document.createElement('div');
+  el.className = 'pop';
+  el.innerHTML = `<div class='pop-bg'></div><div class='pop-panel' role='dialog' aria-modal='true' aria-label='${title}'><div class='sheet-handle'></div><div class='pop-head'><h3>${title}</h3><button class='icon-btn' data-close aria-label='Fechar'>${icon('x')}</button></div>${body}</div>`;
+  $app.appendChild(el);
+  if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': 1.8 } });
+  el.querySelector('.pop-bg').onclick = closeSheet;
+  el.querySelector('[data-close]').onclick = closeSheet;
+  if (instant) el.classList.add('open'); else requestAnimationFrame(() => el.classList.add('open'));
+  el.querySelector('[data-close]').focus({preventScroll:true});
+  return el;
+}
+let arStream = null;
+function stopAR() { if (arStream) { arStream.getTracks().forEach(track => track.stop()); arStream = null; } }
+function closeSheet() { stopAR(); const p = document.querySelector('.pop'); if (p) p.remove(); }
+async function openAR(item) {
+  const el = openSheet('Visualizar em AR', `<p class="ar-help">${item.name} · Prévia de câmera</p><div class="ar-preview"><video autoplay muted playsinline aria-label="Câmera traseira"></video><div class="ar-target">${foodOf(item)[0]}</div><div class="ar-caption" id="arStatus">Solicitando acesso à câmera…</div></div><p class="ar-help">Esta é uma prévia da câmera, não um objeto 3D ancorado. Para posicionar o prato sobre uma superfície em AR real, é necessário configurar o modelo GLB do produto e usar WebXR em dispositivo compatível.</p>`);
+  const status = el.querySelector('#arStatus');
+  if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
+    status.textContent = 'Câmera indisponível. Abra o site por HTTPS ou localhost e permita o acesso.';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode:{ideal:'environment'}}, audio:false});
+    if (!el.isConnected) { stream.getTracks().forEach(t => t.stop()); return; }
+    arStream = stream;
+    el.querySelector('video').srcObject = stream;
+    status.textContent = 'Câmera ativa · Modelo 3D ainda não configurado';
+  } catch (err) { status.textContent = 'Não foi possível ativar a câmera. Verifique as permissões do navegador.'; }
+}
+function actionSheet(title, actions) {
+  const el = openSheet(title, `<div>${actions.map((a, i) => `<button class='pop-item ${a.danger ? 'danger' : ''}' data-i='${i}'>${icon(a.icon)}<span>${a.label}</span>${a.hint ? `<em>${a.hint}</em>` : ''}</button>`).join('')}</div>`);
+  el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { closeSheet(); actions[+b.dataset.i].fn(); });
+}
+function saveSession(){try{localStorage.setItem('savor-demo-state',JSON.stringify({order:state.order,favorites:[...state.favorites]}))}catch(e){}}
+function recount() { state.cart = Object.values(state.order).reduce((a, b) => a + b, 0); updateCartBadge(); saveSession(); }
+function clearCart() { if (!state.cart) return toast('O pedido já está vazio'); if (!confirm('Remover todos os itens do pedido?')) return; state.order = {}; recount(); toast('Pedido limpo'); }
+function toggleFav(id) {
+  if (state.favorites.has(id)) state.favorites.delete(id); else state.favorites.add(id);
+  const f = document.getElementById('fav'); if (f) f.classList.toggle('active', state.favorites.has(id));
+  saveSession(); toast(state.favorites.has(id) ? 'Adicionado aos favoritos' : 'Removido dos favoritos');
+}
+async function shareIt(text) {
+  try { if (navigator.share) { await navigator.share({ title: CONFIG.restaurant.name, text }); return; } } catch (e) { return; }
+  try { await navigator.clipboard.writeText(text); toast('Texto copiado'); } catch (e) { toast('Compartilhar indisponível aqui'); }
+}
+function sortItems() {
+  state.sort = state.sort === 'asc' ? 'desc' : 'asc';
+  CONFIG.items.sort((a, b) => state.sort === 'asc' ? a.price - b.price : b.price - a.price);
+  lastRoute = null; route('#/menu'); toast('Cardápio reordenado');
+}
+function openFavs() {
+  const favs = CONFIG.items.filter(i => state.favorites.has(i.id));
+  const el = openSheet('Meus favoritos', favs.length ? favs.map(i => `<button class='pop-item' data-oid='${i.id}'><span style='font-size:24px'>${foodOf(i)[0]}</span><span>${i.name}</span><em>${fmt.format(i.price)}</em></button>`).join('') : `<p class='empty'>Nenhum favorito ainda.<br>Toque no coração dentro de um prato.</p>`);
+  el.querySelectorAll('[data-oid]').forEach(b => b.onclick = () => { closeSheet(); go('#/item/' + b.dataset.oid); });
+}
+function openCart(instant) {
+  const ent = Object.entries(state.order).filter(([, q]) => q > 0);
+  const total = ent.reduce((s, [id, q]) => s + q * findItem(id).price, 0);
+  const rows = ent.map(([id, q]) => { const it = findItem(id); return `<div class='cart-row'><span class='em'>${foodOf(it)[0]}</span><div class='info'><b>${it.name}</b><small>${fmt.format(it.price)}</small></div><div class='stepper'><button class='step-btn' data-q='${id}' data-d='-1'>${icon('minus')}</button><span class='qty'>${q}</span><button class='step-btn' data-q='${id}' data-d='1'>${icon('plus')}</button></div></div>`; }).join('');
+  const el = openSheet('Meu pedido', rows ? `${rows}<div class='cart-total'><span>Total</span><b>${fmt.format(total)}</b></div><button class='add-btn' data-checkout style='width:100%;justify-content:center'>Finalizar pedido</button>` : `<p class='empty'>Seu pedido está vazio.<br>Toque em + nos pratos para adicionar.</p>`, instant === true);
+  el.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const id = b.dataset.q; state.order[id] = Math.max(0, (state.order[id] || 0) + +b.dataset.d); recount(); openCart(true); });
+  const ck = el.querySelector('[data-checkout]');
+  if (ck) ck.onclick = () => { closeSheet(); openSheet('Revisar pedido', `<p class='desc'>Esta é uma demonstração visual. Nenhum pedido será enviado a um restaurante.</p><div class='cart-total'><span>Total</span><b>${fmt.format(total)}</b></div><button class='add-btn' style='width:100%;justify-content:center' data-copy-order>Copiar resumo do pedido</button>`).querySelector('[data-copy-order]').onclick=()=>shareIt(ent.map(([id,q])=>q+'x '+findItem(id).name).join(', ')+ ' | Total: '+fmt.format(total)); };
+}
+function infoPopup(kind){ const content={booking:['Reservas','Agendamento demonstrativo: selecione uma data e um horário para visualizar sua preferência.','calendar-days'],offers:['Ofertas','No momento não há promoções cadastradas para este restaurante.','tag'],nearby:['Localização','A localização real do restaurante ainda não foi configurada nesta demonstração.','map-pin'],bell:['Notificações','Você está em dia. Não há novas notificações.','bell']};const [title,desc,ic]=content[kind];openSheet(title,`<div style='padding:20px 0;text-align:center'>${icon(ic)}<p class='desc' style='margin-top:12px'>${desc}</p></div>${kind==='booking'?`<label for='bookdate'>Data</label><input id='bookdate' type='date' min='${new Date().toISOString().slice(0,10)}' style='display:block;width:100%;padding:12px;margin:8px 0;border:1px solid var(--line);border-radius:12px'><label for='booktime'>Horário</label><input id='booktime' type='time' value='19:00' style='display:block;width:100%;padding:12px;margin:8px 0;border:1px solid var(--line);border-radius:12px'><button class='add-btn' style='width:100%;justify-content:center' data-book>Salvar preferência</button>`:''}`);const b=document.querySelector('[data-book]');if(b)b.onclick=()=>{const d=document.getElementById('bookdate').value,t=document.getElementById('booktime').value;if(!d)return toast('Selecione uma data');closeSheet();toast('Preferência anotada: '+d+' às '+t+' (demo)')};}
+function moreMenu(kind) {
+  if (kind === 'menu') return actionSheet('Opções do cardápio', [
+    { icon: 'shopping-bag', label: 'Ver meu pedido', hint: state.cart ? state.cart + ' itens' : '', fn: () => openCart() },
+    { icon: 'heart', label: 'Meus favoritos', hint: state.favorites.size || '', fn: openFavs },
+    { icon: 'arrow-up-down', label: state.sort === 'asc' ? 'Ordenar por maior preço' : 'Ordenar por menor preço', fn: sortItems },
+    { icon: 'share-2', label: 'Compartilhar cardápio', fn: () => shareIt('Confira o cardápio do ' + CONFIG.restaurant.name) },
+    { icon: 'trash-2', label: 'Limpar pedido', danger: true, fn: clearCart }
+  ]);
+  const it = findItem(state.currentId), fav = state.favorites.has(it.id);
+  actionSheet(it.name, [
+    { icon: 'heart', label: fav ? 'Remover dos favoritos' : 'Adicionar aos favoritos', fn: () => toggleFav(it.id) },
+    { icon: 'share-2', label: 'Compartilhar prato', fn: () => shareIt(it.name + ' - ' + fmt.format(it.price)) },
+    { icon: 'shopping-bag', label: 'Ver meu pedido', fn: () => openCart() },
+    { icon: 'layout-grid', label: 'Voltar ao cardápio', fn: () => go('#/menu') }
+  ]);
+}
+
+/* Normaliza ingredientes (aceita string ou objeto) */
+const ingredientsOf = item => item.ingredients.map(i => typeof i === 'string' ? { name: i, key: i } : i);
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+const state = {
+  cart: 0,
+  order: {},
+  sort: 'default',
+  favorites: new Set(),
+  qty: 1,
+  filter: 'all',
+  heroIndex: 0
+};
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+const $app = document.getElementById('app');
+
+function imgBox(url, label, extraClass = '') {
+  const missing = !url;
+  return `
+    <div class="img-box ${extraClass} ${missing ? 'img-missing' : ''}" data-label="${label}">
+      ${missing ? '' : `<img src="${url}" alt="${label}" onerror="this.parentElement.classList.add('img-missing');this.remove()">`}
+    </div>`;
+}
+
+function icon(name) { return `<i data-lucide="${name}"></i>`; }
+
+function statusBar(color = 'var(--text)') { return ''; } // o navegador/celular já exibe a status bar
+
+function findItem(id) { return CONFIG.items.find(i => i.id === id); }
+
+function toast(msg) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; $app.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+function addToCart(qty = 1, id) {
+  state.cart += qty;
+  if (id) state.order[id] = (state.order[id] || 0) + qty;
+  updateCartBadge(); saveSession();
+}
+function updateCartBadge() {
+  const b = document.getElementById('cartCount');
+  if (!b) return;
+  b.textContent = state.cart;
+  b.classList.toggle('zero', state.cart === 0);
+}
+
+/* =========================================================
+   VIEWS
+   ========================================================= */
+function viewHome() {
+  return `
+  <section class="view home" data-view="home">
+    <div class="hero">
+    ${imgBox(CONFIG.images.hero, '🍽️', 'hero-bg')}
+    <div class="hero-shade"></div>
+
+    <header class="home-top">
+      <div>
+        <h1 class="logo">${CONFIG.restaurant.name}</h1>
+        <p class="eyebrow">Good food<br>brighter<br>moments</p>
+      </div>
+      <div class="top-actions">
+        <div class="avatar img-box ${CONFIG.images.avatar ? '' : 'img-missing'}" data-label="👤">
+          ${CONFIG.images.avatar ? `<img src="${CONFIG.images.avatar}" alt="">` : ''}
+        </div>
+        <button class="icon-btn" data-info="bell" aria-label="Notificações" style="width:40px;height:40px">
+          ${icon('bell')}<span class="dot-badge"></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="hero-text">
+      <h2 class="hero-title">Great<br>Food Brings<br>People Closer</h2>
+      <p>Discover exceptional dining experiences, crafted with the finest ingredients.</p>
+      <button class="cta" data-nav="#/menu">
+        Explore Menu
+        <span class="cta-arrow">${icon('arrow-right')}</span>
+      </button>
+    </div>
+
+    </div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <nav class="quick-actions">
+        <button class="action-tile active" data-nav="#/menu">
+          <span class="action-circle">${icon('utensils')}</span>Order Food
+        </button>
+        <button class="action-tile" data-info="booking">
+          <span class="action-circle">${icon('calendar')}</span>Book a Table
+        </button>
+        <button class="action-tile" data-info="offers">
+          <span class="action-circle">${icon('tag')}</span>Offers
+        </button>
+        <button class="action-tile" data-info="nearby">
+          <span class="action-circle">${icon('map-pin')}</span>Nearby
+        </button>
+      </nav>
+
+      <div class="info-cards">
+        <button class="info-card" data-nav="#/menu">
+          <div class="thumb img-box ${CONFIG.images.infoMenu ? '' : 'img-missing'}" data-label="🍝">
+            ${CONFIG.images.infoMenu ? `<img src="${CONFIG.images.infoMenu}" alt="">` : ''}
+          </div>
+          <h3>Menu</h3>
+          <p>Explore our signature dishes</p>
+          <span class="go-btn">${icon('arrow-right')}</span>
+        </button>
+        <button class="info-card" data-info="booking">
+          <div class="thumb img-box ${CONFIG.images.infoRes ? '' : 'img-missing'}" data-label="🍷">
+            ${CONFIG.images.infoRes ? `<img src="${CONFIG.images.infoRes}" alt="">` : ''}
+          </div>
+          <h3>Reservations</h3>
+          <p>Book your table for a special experience</p>
+          <span class="go-btn">${icon('arrow-right')}</span>
+        </button>
+      </div>
+    </div>
+  </section>`;
+}
+
+function viewMenu() {
+  const chips = CONFIG.categories.map(c => `
+    <button class="chip ${state.filter === c.id ? 'active' : ''}" data-filter="${c.id}">${c.label}</button>`).join('');
+
+  const cards = CONFIG.items.map((item, idx) => {
+    const visible = state.filter === 'all' || item.category === state.filter;
+    return `
+      <article class="card ${visible ? '' : 'hidden'}" data-open="${item.id}" style="animation-delay:${idx * 60}ms">
+        ${imgBox(itemImg(item, 1, 400, 480), foodOf(item)[0])}
+        <div class="card-info">
+          <h3>${item.name}</h3>
+          <p>${fmt.format(item.price)}</p>
+        </div>
+        <button class="card-add" aria-label="Adicionar ${item.name}" data-add="${item.id}">${icon('plus')}</button>
+      </article>`;
+  }).join('');
+
+  return `
+  <section class="view menu" data-view="menu">
+    <div class="menu-header">
+      <div class="img-box ${CONFIG.images.ambient ? '' : 'img-missing'}" data-label="🍽️">
+        ${CONFIG.images.ambient ? `<img src="${CONFIG.images.ambient}" alt="">` : ''}
+      </div>
+      <div class="shade"></div>
+      <div class="menu-top">
+        <button class="icon-btn" aria-label="Voltar" data-nav="#/home">${icon('chevron-left')}</button>
+        <div style="display:flex;gap:10px">
+          <button class="icon-btn" aria-label="Meu pedido" data-cart>${icon('shopping-bag')}<span class="count-badge zero" id="cartCount">${state.cart}</span></button>
+          <button class="icon-btn" aria-label="Mais opções" data-more="menu">${icon('ellipsis')}</button>
+        </div>
+      </div>
+      <div class="menu-headline">
+        <p class="eyebrow">Discover<br>a memorable<br>dining experience</p>
+        <h1>Our Menu</h1>
+      </div>
+    </div>
+
+    <div class="menu-body">
+      <div class="chips">${chips}</div>
+      <div class="grid">${cards}</div>
+    </div>
+  </section>`;
+}
+
+function viewItem(item) {
+  const fav = state.favorites.has(item.id);
+  const ingredients = ingredientsOf(item).map(ing => `
+    <div class="ingredient">
+      ${imgBox(CONFIG.images.ingredients[ing.key] || IMG(ing.name + ',food', 120, 120, 2), EMOJI[ing.name] || '🍽️')}
+      ${ing.name}
+    </div>`).join('');
+
+  return `
+  <section class="view detail" data-view="item">
+    <div class="float-top">
+      <button class="icon-btn" aria-label="Voltar" data-nav="#/menu">${icon('chevron-left')}</button>
+      <button class="icon-btn" aria-label="Mais opções" data-more="item">${icon('ellipsis')}</button>
+    </div>
+    <div class="scroller">
+    <div class="detail-hero">
+      <div class="slides" id="slides">${galleryOf(item).map((src, n) => `<div class="slide">${imgBox(src, foodOf(item)[0])}</div>`).join('')}</div>
+      <button class="arrow l" data-slide="-1" aria-label="Anterior">${icon('chevron-left')}</button>
+      <button class="arrow r" data-slide="1" aria-label="Próximo">${icon('chevron-right')}</button>
+      <div class="dots" id="dots">${galleryOf(item).map((_, i) => `<button aria-label="Imagem ${i + 1}" class="${i ? '' : 'on'}" data-dot="${i}"></button>`).join('')}</div>
+    </div>
+    <div class="detail-content">
+      <div class="detail-head">
+        <h1>${item.name}</h1>
+        <button class="fav ${fav ? 'active' : ''}" id="fav" aria-label="Favoritar">${icon('heart')}</button>
+      </div>
+      <p class="eyebrow subtitle">${item.subtitle}</p>
+      <p class="price">${fmt.format(item.price)}</p>
+
+      <div class="meta">
+        <div class="meta-item">${icon('star')}${item.rating}</div>
+        <div class="meta-item">${icon('clock')}${item.time}</div>
+        <div class="meta-item">${icon('flame')}${item.cal}</div>
+      </div>
+
+      <p class="desc">${item.desc}</p>
+
+      <div class="ingredients">
+        <h2>Ingredients</h2>
+        <div class="ingredient-list">${ingredients}</div>
+      </div>
+    </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="order-row"><div class="stepper">
+        <button class="step-btn" id="minus" aria-label="Diminuir">${icon('minus')}</button>
+        <span class="qty" id="qty">${state.qty}</span>
+        <button class="step-btn" id="plus" aria-label="Aumentar">${icon('plus')}</button>
+      </div>
+      <button class="add-btn" id="addOrder">
+        <span>Add to Order</span>
+        <span class="sep"></span>
+        <span id="totalPrice">${fmt.format(state.qty * item.price)}</span>
+      </button></div>
+      <button class="ar-btn" id="openAR" aria-label="Abrir câmera para visualizar em realidade aumentada">${icon('scan-face')} <span>Ver em AR · Abrir câmera</span> ${icon('camera')}</button>
+    </div>
+  </section>`;
+}
+
+/* =========================================================
+   ROTEAMENTO (hash) - tudo em uma única tela
+   ========================================================= */
+function render(html) {
+  $app.innerHTML = html;
+  if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': 1.8 } });
+  bindEvents();
+  updateCartBadge();
+}
+
+let lastRoute = null;
+
+function route(hash) {
+  if (typeof hash !== 'string') hash = location.hash;
+  hash = hash || '#/home';
+  if (hash === lastRoute) return;
+  lastRoute = hash;
+
+  const [name, id] = hash.replace(/^#\/?/, '').split('/');
+  state.currentId = id;
+
+  if (name === 'menu') {
+    render(viewMenu());
+  } else if (name === 'item' && findItem(id)) {
+    state.qty = 1;
+    render(viewItem(findItem(id)));
+  } else {
+    render(viewHome()); // sem replaceState: em iframes srcdoc a URL não pode ser alterada
+  }
+  window.scrollTo(0, 0);
+}
+
+/* Navega: tenta atualizar o hash e renderiza direto, para funcionar mesmo se o histórico estiver bloqueado */
+function go(hash) {
+  try { location.hash = hash; } catch (e) { /* ambiente sem acesso ao histórico */ }
+  route(hash);
+}
+
+/* =========================================================
+   EVENTOS (delegação)
+   ========================================================= */
+function bindEvents() {
+  // navegação
+  $app.querySelectorAll('[data-nav]').forEach(el =>
+    el.addEventListener('click', () => go(el.dataset.nav)));
+
+  $app.querySelectorAll('[data-info]').forEach(el => el.addEventListener('click', () => infoPopup(el.dataset.info)));
+  // toast em botões ainda não implementados
+  $app.querySelectorAll('[data-toast]').forEach(el =>
+    el.addEventListener('click', () => toast(el.dataset.toast)));
+
+  // filtros de categoria (re-render só da lista, sem trocar de tela)
+  $app.querySelectorAll('[data-filter]').forEach(el =>
+    el.addEventListener('click', () => {
+      state.filter = el.dataset.filter;
+      $app.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === el));
+      $app.querySelectorAll('.card').forEach(card => {
+        const item = findItem(card.dataset.open);
+        card.classList.toggle('hidden', !(state.filter === 'all' || item.category === state.filter));
+      });
+    }));
+
+  // abrir produto ao tocar no card
+  $app.querySelectorAll('[data-open]').forEach(el =>
+    el.addEventListener('click', () => go(`#/item/${el.dataset.open}`)));
+
+  // "+" do card: adiciona sem abrir o produto
+  $app.querySelectorAll('[data-add]').forEach(el =>
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      addToCart(1, el.dataset.add);
+      toast(`${findItem(el.dataset.add).name} adicionado`);
+    }));
+
+  // favorito
+  const fav = document.getElementById('fav');
+  if (fav) fav.addEventListener('click', () => toggleFav(state.currentId));
+
+  // popups "..." e carrinho
+  $app.querySelectorAll('[data-cart]').forEach(b => b.onclick = () => openCart());
+  $app.querySelectorAll('[data-more]').forEach(b => b.onclick = () => moreMenu(b.dataset.more));
+
+  // slides do produto
+  const sl = document.getElementById('slides');
+  if (sl) {
+    const dots = [...document.querySelectorAll('#dots button')];
+    const idx = () => Math.round(sl.scrollLeft / sl.clientWidth);
+    const goTo = i => sl.scrollTo({ left: Math.max(0, Math.min(dots.length - 1, i)) * sl.clientWidth, behavior: 'smooth' });
+    sl.addEventListener('scroll', () => dots.forEach((d, k) => d.classList.toggle('on', k === idx())), { passive: true });
+    dots.forEach(d => d.addEventListener('click', () => goTo(+d.dataset.dot)));
+    $app.querySelectorAll('[data-slide]').forEach(b => b.addEventListener('click', () => goTo(idx() + +b.dataset.slide)));
+  }
+
+  // stepper + total
+  const plus = document.getElementById('plus');
+  if (plus) {
+    const item = findItem(state.currentId);
+    const qtyEl = document.getElementById('qty');
+    const totalEl = document.getElementById('totalPrice');
+    const refresh = () => {
+      qtyEl.textContent = state.qty;
+      totalEl.textContent = fmt.format(state.qty * item.price);
+    };
+    plus.addEventListener('click', () => { state.qty++; refresh(); });
+    document.getElementById('minus').addEventListener('click', () => {
+      if (state.qty > 1) { state.qty--; refresh(); }
+    });
+    document.getElementById('openAR').addEventListener('click', () => openAR(item));
+    document.getElementById('addOrder').addEventListener('click', () => {
+      addToCart(state.qty, state.currentId);
+      toast(`${state.qty}x ${item.name} no pedido`);
+    });
+  }
+}
+
+/* Gestos horizontais simples para voltar (swipe da esquerda para a direita) */
+let touchX = null;
+$app.addEventListener('touchstart', e => { touchX = e.target.closest('.slides,.chips,.ingredient-list,.pop,button,input') ? null : e.touches[0].clientX; }, { passive: true });
+$app.addEventListener('touchend', e => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (touchX < 32 && dx > 110 && lastRoute && lastRoute !== '#/home') { go(lastRoute.startsWith('#/item/') ? '#/menu' : '#/home'); }
+  touchX = null;
+});
+
+/* =========================================================
+   INIT
+   ========================================================= */
+try { const saved=JSON.parse(localStorage.getItem('savor-demo-state')||'{}'); if(saved.order && typeof saved.order==='object')state.order=Object.fromEntries(Object.entries(saved.order).filter(([id,q])=>findItem(id)&&Number.isInteger(q)&&q>0&&q<999)); if(Array.isArray(saved.favorites))state.favorites=new Set(saved.favorites.filter(id=>findItem(id)));state.cart=Object.values(state.order).reduce((a,b)=>a+b,0); }catch(e){}
+window.addEventListener('hashchange', () => route());
+document.addEventListener('DOMContentLoaded', () => route());
+if (document.readyState !== 'loading') route();
+</script>
+</body>
+</html>

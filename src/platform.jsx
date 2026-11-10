@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Menu } from './main.jsx';
-import { PRODUCTS, CATEGORIES, RESTAURANT, loadCatalog } from './products.js';
+import { SavorMenu } from './SavorMenu.jsx';
+import { StudioPanel } from './StudioPanel.jsx';
+import { MarketingLanding, AuthPage } from './Marketing.jsx';
 import {
   configured, auth, db, store, loginGoogle, uploadMedia,
   signOut, onAuthStateChanged,
@@ -15,10 +16,11 @@ import { shouldRedirectToBusiness } from './authRoutes.js';
 import { createOrderIntent } from './orders.js';
 import { trackVisit, trackEvent, installErrorReporting } from './telemetry.js';
 import './platform.css';
+import './account.css';
 
 const {collection, doc, query, where, addDoc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot} = store;
 const BRL = (v) => Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-const blank = {name: '', description: '', cat: 'Pratos', price: 0, kcal: 0, diameter: .22, roughness: .76, ingredients: '', emoji: '🍽️', prompt: 'Gostaria de adicionar ao pedido?', photo: '', referencePhotos: [], active: true};
+const blank = {name: '', description: '', cat: 'Pratos', price: 0, kcal: 0, diameter: .22, roughness: .76, ingredients: '', stock: null, emoji: '🍽️', prompt: 'Gostaria de adicionar ao pedido?', photo: '', referencePhotos: [], active: true};
 const cleanHandle = (v) => (v || '').trim().replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
 const slug = (v) => String(v || '').trim();
 
@@ -59,25 +61,7 @@ function useProducts(rid, forConsumer = false) {
   }, [rid, forConsumer]);
   return [items, error];
 }
-function GoGoogle({user, target = '/painel', children = 'Continuar com Google'}) {
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  return <div><button disabled={loading} className="p-btn p-primary" onClick={async()=>{
-    if (user) {navigate(target, true);return;}
-    setLoading(true);setError('');
-    try {const r = await loginGoogle(); if(r) navigate(target, true);} catch(e) {setError(errText(e));} finally {setLoading(false);}
-  }}>{loading ? 'Conectando…' : children}</button><Notice error={error}/></div>;
-}
-function SiteHeader({user, brand}) {return <header className="site-header"><A href="/" className="brand"><span className="brand-mark">◉</span> {brand}</A><nav><A href="/menu/demo">Demonstração</A>{user ? <A href="/painel" className="nav-action">Painel</A> : <A href="/entrar" className="nav-action">Entrar</A>}</nav></header>;}
-function Landing({user, site}) {return <div className="platform-page">
-  <SiteHeader user={user} brand={site.name || 'Mesa Imersiva'} />
-  <section className="landing-hero"><div><div className="eyebrow">CARDÁPIO 3D + REALIDADE AUMENTADA</div><h1>{site.headline || 'Uma experiência que começa antes da primeira garfada.'}</h1><p>{site.description || 'Seu cliente explora cada prato em 3D, posiciona o pedido na própria mesa usando a câmera e finaliza direto no WhatsApp do restaurante.'}</p><div className="hero-actions"><A href="/entrar" className="p-btn p-primary">Criar meu cardápio →</A><A href="/menu/demo" className="p-btn p-outline">Explorar cardápio demo ↗</A></div><p className="subtle">Cadastro com Google · Fotos e itens por restaurante · Modelos AR preparados pela nossa equipe</p></div>
-    <div className="hero-preview"><div className="hero-preview-top">PRÉVIA DA EXPERIÊNCIA <span>● ao vivo</span></div><img alt="Foto do prato de frango e abacate usado no cardápio de demonstração" src="/fotos/frango.jpg"/><div className="hero-preview-bottom"><span>Explore cada detalhe</span><strong>Visualização 3D + AR</strong></div></div>
-  </section>
-  <section className="features"><div><span>01 / RESTAURANTE</span><h3>Seu cardápio, sua marca</h3><p>Cadastre produtos, preços, categorias, fotografias, redes sociais e número do WhatsApp. Gerencie seus produtos e solicite a publicação do cardápio com nossa equipe.</p></div><div><span>02 / PRODUÇÃO AR</span><h3>Da foto para o modelo</h3><p>Envie as fotos de referência e solicite a criação de um modelo 3D. Nossa equipe trabalha com prazo de referência de até 7 dias.</p></div><div><span>03 / CONSUMIDOR</span><h3>Pedido sem complicação</h3><p>Seu cliente visualiza, monta o carrinho e abre a mensagem completa no WhatsApp do estabelecimento.</p></div></section>
-  <div className="landing-bottom"><p>Crie seu cardápio digital, encante seus clientes e receba pedidos com praticidade.</p><A href="/entrar" className="p-btn p-primary">Começar agora →</A></div>
-</div>;}
-function Login({user, site}) {return <div className="platform-page"><SiteHeader brand={site.name || 'Mesa Imersiva'} user={user}/><section className="login-wrap"><div className="login-card"><div className="eyebrow">ACESSO AO ESTABELECIMENTO</div><h1>Entre para criar seu cardápio.</h1><p>Entre com Google para cadastrar seu estabelecimento, organizar os produtos e acompanhar solicitações de modelos 3D.</p><GoGoogle user={user}/><div className="login-divider">Acesso protegido pela sua conta Google</div><p className="subtle">Seu estabelecimento, produtos e cardápio reunidos em um só lugar. Seus clientes não precisam criar conta para fazer pedidos.</p></div></section></div>;}
+function SiteHeader({user, brand}) {return <header className="site-header"><A href="/" className="brand"><span className="brand-mark">◉</span> {brand}</A><nav><A href="/painel">Meus restaurantes</A>{user ? <A href="/painel" className="nav-action">Painel</A> : <A href="/entrar" className="nav-action">Entrar</A>}</nav></header>;}
 function useResolvedRestaurant(handle) {
   const [resolved,setResolved]=useState({rid:null,loading:true});
   useEffect(()=>{
@@ -104,33 +88,31 @@ function decodeMenuHandle(path){
     return /^[A-Za-z0-9_-]{1,120}$/.test(value)?value:'';
   }catch{return '';}
 }
-function Consumer({handle, demo}) {
-  const resolved=useResolvedRestaurant(demo ? null : handle);
+function Consumer({handle}) {
+  const resolved=useResolvedRestaurant(handle);
   const rid=resolved.rid;
-  const [r, state] = useRestaurant(demo ? null : rid);
-  const [prods, error] = useProducts(demo ? null : rid, true);
-  const [models] = useLive('modelCatalog');
-  const [sample, setSample] = useState(null);
-  const onMenuEvent = React.useCallback((type,message)=>trackEvent(rid,type,message),[rid]);
-  const onOrder = React.useCallback((order)=>createOrderIntent(rid,order),[rid]);
-  useEffect(() => {if (demo) loadCatalog().then(s => setSample({r:{...s.RESTAURANT, instagram:'diemsociety', instagramName:'Diem Society', instagramBio:'Novidades, combos e bastidores', whatsapp:''}, p:s.PRODUCTS.map(p=>({...p,url:''})),c:s.CATEGORIES})).catch(()=>setSample({error:'Catálogo da demo não encontrado.'}));}, [demo]);
+  const [r, state]=useRestaurant(rid);
+  const [prods,error]=useProducts(rid,true);
+  const [models]=useLive('modelCatalog');
+  const onMenuEvent=React.useCallback((type,message)=>trackEvent(rid,type,message),[rid]);
+  const onOrder=React.useCallback((order)=>createOrderIntent(rid,order),[rid]);
   useEffect(()=>{
-    if(demo || resolved.loading || state!=='ok' || !r?.published)return;
+    if(resolved.loading||state!=='ok'||!r?.published)return;
     trackVisit(rid);
     const unlisten=installErrorReporting(rid);
-    const onHide=()=>{void trackEvent(rid,'exit');};
+    const onHide=()=>{void trackEvent(rid,'exit')};
     window.addEventListener('pagehide',onHide);
-    return()=>{unlisten();window.removeEventListener('pagehide',onHide);};
-  },[demo,rid,resolved.loading,state,r?.published]);
-  useEffect(()=>{if(!demo && rid && error)void trackEvent(rid,'error',error);},[error, demo, rid]);
-  if (demo) return sample?.r ? <><div className="demo-ribbon"><A href="/">← Início</A> Você está explorando um cardápio de demonstração</div><Menu restaurant={sample.r} products={sample.p} categories={sample.c}/></> : <Busy>{sample?.error || 'Abrindo demonstração…'}</Busy>;
-  if (!configured) return <Busy>Não foi possível carregar o cardápio no momento. Tente novamente mais tarde.</Busy>;
-  if(resolved.loading || state==='loading')return <Busy/>;
-  if (!r || !r.published) return <Busy>Este cardápio não está publicado ou não existe.</Busy>;
-  const mapped = prods.map(p => ({...p,url:(models.find(m=>m.id===p.modelId && m.active)?.url || ''), photo:p.photo || '', ingredients:Array.isArray(p.ingredients)?p.ingredients:[], cat:p.cat || 'Outros', price:Number(p.price || 0), diameter:Number(p.diameter || .2), kcal:Number(p.kcal || 0)}));
-  const cats = ['Todos', ...new Set(mapped.map(p => p.cat))];
-  return <MenuErrorBoundary key={rid} rid={rid}>{error && <Notice error={error}/>}<Menu restaurant={r} products={mapped} categories={cats} onEvent={onMenuEvent} onOrder={onOrder}/></MenuErrorBoundary>;
+    return()=>{unlisten();window.removeEventListener('pagehide',onHide)};
+  },[rid,resolved.loading,state,r?.published]);
+  useEffect(()=>{if(rid&&error)void trackEvent(rid,'error',error)},[error,rid]);
+  if(!configured)return <Busy>Não foi possível carregar o cardápio no momento.</Busy>;
+  if(resolved.loading||state==='loading')return <Busy>Abrindo cardápio…</Busy>;
+  if(!r||!r.published)return <Busy>Este cardápio não está publicado ou não existe.</Busy>;
+  const mapped=prods.map(p=>({...p,url:models.find(m=>m.id===p.modelId&&m.active)?.url||'',photo:p.photo||'',ingredients:Array.isArray(p.ingredients)?p.ingredients:[],cat:p.cat||'Outros',price:Number(p.price||0),diameter:Number(p.diameter||.2),kcal:Number(p.kcal||0)}));
+  const cats=['Todos',...new Set(mapped.map(p=>p.cat))];
+  return <MenuErrorBoundary key={rid} rid={rid}>{error&&<Notice error={error}/>}<SavorMenu restaurant={r} products={mapped} categories={cats} onEvent={onMenuEvent} onOrder={onOrder}/></MenuErrorBoundary>;
 }
+
 function ProductEditor({rid, product, onClose}) {
   const [models] = useLive('modelCatalog');
   const [fields, setFields] = useState(() => ({...blank,...product, ingredients:Array.isArray(product?.ingredients) ? product.ingredients.join('\n') : blank.ingredients, referencePhotos:product?.referencePhotos || []}));
@@ -155,7 +137,7 @@ function ProductEditor({rid, product, onClose}) {
       const price=Number(fields.price), diameter=Number(fields.diameter);
       if (!Number.isFinite(price) || price < 0 || price > 100000) throw Error('Preço inválido.');
       if (!Number.isFinite(diameter) || diameter < .05 || diameter > 2) throw Error('Diâmetro precisa estar entre 0,05 e 2 metros.');
-      const obj = {name:fields.name.trim().slice(0,120),description:fields.description.trim().slice(0,1200),cat:slug(fields.cat).slice(0,70)||'Outros',price,kcal:Math.max(0,Number(fields.kcal)||0),diameter,roughness:Math.min(1,Math.max(0,Number(fields.roughness)||.75)), ingredients:fields.ingredients.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,25),emoji:fields.emoji.trim().slice(0,10),prompt:fields.prompt.trim().slice(0,200),photo:fields.photo||'',referencePhotos:fields.referencePhotos.slice(0,MAX_REFERENCE_PHOTOS),active:!!fields.active,modelId:fields.modelId || '',updatedAt:now()};
+      const obj = {name:fields.name.trim().slice(0,120),description:fields.description.trim().slice(0,1200),cat:slug(fields.cat).slice(0,70)||'Outros',price,kcal:Math.max(0,Number(fields.kcal)||0),diameter,roughness:Math.min(1,Math.max(0,Number(fields.roughness)||.75)), ingredients:fields.ingredients.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,25),emoji:fields.emoji.trim().slice(0,10),prompt:fields.prompt.trim().slice(0,200),photo:fields.photo||'',referencePhotos:fields.referencePhotos.slice(0,MAX_REFERENCE_PHOTOS),active:!!fields.active,...(fields.stock!==null&&fields.stock!==''?{stock:Math.max(0,Math.floor(Number(fields.stock)||0))}:{}),modelId:fields.modelId || '',updatedAt:now()};
       if(product?.id) await updateDoc(productDoc(rid, product.id), obj);
       else await addDoc(productCollection(rid), {...obj,modelStatus:'none',createdAt:now()});
       onClose();
@@ -164,7 +146,7 @@ function ProductEditor({rid, product, onClose}) {
   return <div className="modal-back" onClick={onClose}><section className="p-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><h2>{product ? 'Editar produto' : 'Adicionar produto'}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div><form onSubmit={save} className="form-grid">
     <label>Nome do item<input required maxLength={120} value={fields.name} onChange={e=>set('name',e.target.value)} /></label><label>Categoria<input required value={fields.cat} onChange={e=>set('cat',e.target.value)}/></label>
     <label className="span-2">Descrição<textarea rows={3} value={fields.description} onChange={e=>set('description',e.target.value)} /></label>
-    <label>Preço (R$)<input type="number" min="0" max="100000" step="0.01" value={fields.price} onChange={e=>set('price',e.target.value)}/></label><label>Calorias<input type="number" min="0" value={fields.kcal} onChange={e=>set('kcal',e.target.value)}/></label>
+    <label>Preço (R$)<input type="number" min="0" max="100000" step="0.01" value={fields.price} onChange={e=>set('price',e.target.value)}/></label><label>Estoque (opcional)<input type="number" min="0" step="1" placeholder="Não controlado" value={fields.stock??''} onChange={e=>set('stock',e.target.value)}/></label><label>Calorias<input type="number" min="0" value={fields.kcal} onChange={e=>set('kcal',e.target.value)}/></label>
     <label>Diâmetro real estimado (metros)<input type="number" min="0.05" max="2" step="0.01" value={fields.diameter} onChange={e=>set('diameter',e.target.value)}/></label><label>Emoji do prato<input maxLength={10} value={fields.emoji} onChange={e=>set('emoji',e.target.value)}/></label>
     <label className="span-2">Ingredientes (um por linha)<textarea rows={3} value={fields.ingredients} onChange={e=>set('ingredients',e.target.value)}/></label>
     <label className="span-2">Mensagem de convite em AR<input maxLength={200} value={fields.prompt} onChange={e=>set('prompt',e.target.value)}/></label>
@@ -176,7 +158,7 @@ function ProductEditor({rid, product, onClose}) {
     <div className="span-2"><Notice error={error} ok={ok}/><button disabled={busy} className="p-btn p-primary" type="submit">{busy?'Processando…':'Salvar produto'}</button></div>
   </form></section></div>;
 }
-function RestaurantSettings({r}) {
+function RestaurantSettings({r,mode='all'}) {
   const [f,setF] = useState(()=>({...r}));
   const [busy,setBusy]=useState(false), [error,setError]=useState(''), [ok,setOk]=useState('');
   useEffect(()=>setF({...r}),[r?.id]);
@@ -188,20 +170,22 @@ function RestaurantSettings({r}) {
     setOk('Configurações salvas.');
   }catch(e){setError(errText(e));}finally{setBusy(false);}};
   const cover = async (file, field='cover')=>{if(!file)return;setBusy(true);setError('');try{const {url} = await uploadMedia(r.id,file);setF(v=>({...v,[field]:url}));setOk('Foto pronta! Toque em Salvar estabelecimento para concluir.');}catch(e){setError(errText(e));}finally{setBusy(false);}};
-  return <form className="panel p-form" onSubmit={save}><h2>Configurações do estabelecimento</h2><div className="form-grid">
-    <label>Nome do restaurante<input required value={f.name||''} onChange={e=>setF({...f,name:e.target.value})}/></label><label>WhatsApp com DDI (55)<input required placeholder="5511999999999" value={f.whatsapp||''} onChange={e=>setF({...f,whatsapp:e.target.value})}/></label>
-    <label>Nicho / tipo do estabelecimento<input maxLength={80} placeholder="Hamburgueria, pizzaria, cafeteria…" value={f.niche||''} onChange={e=>setF({...f,niche:e.target.value})}/></label><label>Endereço (opcional)<input maxLength={240} value={f.address||''} onChange={e=>setF({...f,address:e.target.value})}/></label>
-    <label className="span-2">Descrição do restaurante<textarea rows={2} value={f.tagline||''} onChange={e=>setF({...f,tagline:e.target.value})}/></label>
-    <label>Instagram (@ sem URL)<input value={f.instagram||''} placeholder="meurestaurante" onChange={e=>setF({...f,instagram:e.target.value})}/></label><label>Nome no card do Instagram<input value={f.instagramName||''} onChange={e=>setF({...f,instagramName:e.target.value})}/></label>
-    <label className="span-2">Bio do card Instagram<textarea rows={2} value={f.instagramBio||''} onChange={e=>setF({...f,instagramBio:e.target.value})}/></label>
-    <label>Foto da capa<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
+  return <form className="panel p-form" onSubmit={save}><h2>{mode==='contacts'?'Contatos e redes sociais':'Dados do estabelecimento'}</h2><div className="form-grid">
+    {mode!=='contacts'&&<><label>Nome do restaurante<input required value={f.name||''} onChange={e=>setF({...f,name:e.target.value})}/></label></>}
+    {mode!=='establishment'&&<><label>WhatsApp com DDI (55)<input required placeholder="5511999999999" value={f.whatsapp||''} onChange={e=>setF({...f,whatsapp:e.target.value})}/></label></>}
+    {mode!=='contacts'&&<><label>Nicho / tipo do estabelecimento<input maxLength={80} placeholder="Hamburgueria, pizzaria, cafeteria…" value={f.niche||''} onChange={e=>setF({...f,niche:e.target.value})}/></label><label>Endereço (opcional)<input maxLength={240} value={f.address||''} onChange={e=>setF({...f,address:e.target.value})}/></label>
+    <label className="span-2">Descrição do restaurante<textarea rows={2} value={f.tagline||''} onChange={e=>setF({...f,tagline:e.target.value})}/></label></>}
+    {mode!=='establishment'&&<><label>Instagram (@ sem URL)<input value={f.instagram||''} placeholder="meurestaurante" onChange={e=>setF({...f,instagram:e.target.value})}/></label><label>Nome no card do Instagram<input value={f.instagramName||''} onChange={e=>setF({...f,instagramName:e.target.value})}/></label>
+    <label className="span-2">Bio do card Instagram<textarea rows={2} value={f.instagramBio||''} onChange={e=>setF({...f,instagramBio:e.target.value})}/></label></>}
+    {mode!=='contacts'&&<><label>Foto da capa<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
     {f.logo && <img className="preview-pic" alt="Logotipo" src={f.logo}/>}
-    <label>Cor de destaque do estabelecimento<input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843'} onChange={e=>setF({...f,accentColor:e.target.value})}/></label>
+    <label>Cor de destaque do estabelecimento<input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843'} onChange={e=>setF({...f,accentColor:e.target.value})}/></label></>}
     <p className="subtle span-2">A publicação do cardápio é aprovada pela equipe. Para solicitar a publicação, use o botão no topo do painel.</p>
   </div><Notice error={error} ok={ok}/><button className="p-btn p-primary" disabled={busy}>{busy?'Salvando…':'Salvar estabelecimento'}</button></form>;
 }
 function RestaurantOrders({rid}) {
   const [orders,error]=useLive(`orders/${rid}`);
+  const [search,setSearch]=useState('');
   const [notice,setNotice]=useState(''),[busy,setBusy]=useState('');
   const statuses={initiated:'Aguardando confirmação',confirmed:'Confirmado',preparing:'Em preparo',completed:'Concluído',cancelled:'Cancelado'};
   const change=async(order,status)=>{
@@ -209,8 +193,8 @@ function RestaurantOrders({rid}) {
     try {await updateDoc(doc(db,'orders',rid,order.id),{status,updatedAt:now()});setNotice('Situação do pré-pedido atualizada.');}
     catch(e){setNotice(errText(e));}finally{setBusy('');}
   };
-  return <section className="panel"><h2>Pré-pedidos do cardápio</h2><p className="subtle">Os registros abaixo são criados quando o visitante toca em “Fazer pedido no WhatsApp”. A confirmação, o pagamento e o envio da mensagem precisam ser conferidos com o cliente.</p><Notice error={error} ok={notice}/>
-    {orders.length?<div className="orders-list">{orders.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,100).map(o=><article className="order-card" key={o.id}><div className="order-head"><strong>#{o.code||o.id.slice(-6).toUpperCase()}</strong><span>{o.createdAt?new Date(o.createdAt).toLocaleString('pt-BR'):'Agora'}</span></div><h3>{o.customerName||'Cliente não identificado'}</h3><ul>{(Array.isArray(o.items)?o.items:Object.values(o.items||{})).map((item,i)=><li key={i}>{item.quantity} × {item.name} — {BRL(item.price*item.quantity)}</li>)}</ul><p>{o.notes||'Sem observações'}</p><div className="order-foot"><strong>{BRL(o.total)}</strong><label>Etapa<select disabled={busy===o.id} value={o.status||'initiated'} onChange={e=>change(o,e.target.value)}>{Object.entries(statuses).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label></div></article>)}</div>:<p className="empty">Nenhum pré-pedido registrado.</p>}
+  return <section className="panel"><h2>Pré-pedidos do cardápio</h2><p className="subtle">Os registros abaixo são criados quando o visitante toca em “Fazer pedido no WhatsApp”. A confirmação, o pagamento e o envio da mensagem precisam ser conferidos com o cliente.</p><Notice error={error} ok={notice}/><input aria-label="Pesquisar pedidos" placeholder="Buscar cliente, número ou observação..." value={search} onChange={e=>setSearch(e.target.value)} style={{maxWidth:480,marginBottom:12}}/>
+    {orders.length?<div className="orders-list">{orders.filter(o=>[o.code,o.customerName,o.notes].join(' ').toLowerCase().includes(search.toLowerCase())).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,100).map(o=><article className="order-card" key={o.id}><div className="order-head"><strong>#{o.code||o.id.slice(-6).toUpperCase()}</strong><span>{o.createdAt?new Date(o.createdAt).toLocaleString('pt-BR'):'Agora'}</span></div><h3>{o.customerName||'Cliente não identificado'}</h3><ul>{(Array.isArray(o.items)?o.items:Object.values(o.items||{})).map((item,i)=><li key={i}>{item.quantity} × {item.name} — {BRL(item.price*item.quantity)}</li>)}</ul><p>{o.notes||'Sem observações'}</p><div className="order-foot"><strong>{BRL(o.total)}</strong><label>Etapa<select disabled={busy===o.id} value={o.status||'initiated'} onChange={e=>change(o,e.target.value)}>{Object.entries(statuses).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label></div></article>)}</div>:<p className="empty">Nenhum pré-pedido registrado.</p>}
   </section>;
 }
 function RestaurantPanel({rid,user,admin}) {
@@ -248,15 +232,16 @@ function RestaurantPanel({rid,user,admin}) {
       setNotice('Solicitação enviada. A equipe avaliará seu cardápio antes de liberar o link público.');
     }catch(e){setNotice(errText(e));}finally{setBusy(false);}
   };
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="crumb"><A href="/painel">Meus restaurantes</A> / {r.name}</div><div className="dashboard-title"><div><div className="eyebrow">GESTÃO DO ESTABELECIMENTO</div><h1>{r.name}</h1><p>{r.published?'Cardápio publicado e disponível':pendingPub?'Publicação em análise':'Cardápio privado — publicação sujeita à aprovação'}</p></div><div className="panel-title-actions">{r.published&&url&&<a href={url} target="_blank" rel="noopener noreferrer" className="p-btn p-outline">Abrir cardápio ↗</a>}{!r.published&&<button className="p-btn p-primary" disabled={busy||!!pendingPub} onClick={requestPublish}>{pendingPub?'Aguardando aprovação':busy?'Enviando…':'Solicitar publicação'}</button>}</div></div>
-    <Notice error={pubError} ok={notice}/>
-    {url?<div className="share-strip"><div><small>Seu link público</small><code>{url}</code></div><button onClick={()=>{navigator.clipboard?.writeText(url);setNotice('Link copiado.');}}>Copiar link</button></div>:<div className="pending-strip"><strong>Seu cardápio ainda não tem link público.</strong><span>{lastPub?.status==='rejected'?'Solicitação devolvida para ajustes. Faça as correções e envie novamente.':pendingPub?'Recebemos sua solicitação de publicação.':'Cadastre os produtos e solicite a publicação quando estiver pronto.'}</span></div>}
-    <div className="tabbar"><button className={tab==='items'?'active':''} onClick={()=>setTab('items')}>Produtos ({products.length})</button><button className={tab==='requests'?'active':''} onClick={()=>setTab('requests')}>Modelos 3D ({myRequests.length})</button><button className={tab==='orders'?'active':''} onClick={()=>setTab('orders')}>Pedidos</button><button className={tab==='settings'?'active':''} onClick={()=>setTab('settings')}>Minha loja</button></div>
-    {tab==='items' && <section className="panel"><div className="panel-head"><div><h2>Seu cardápio</h2><p>Gerencie fotos, informações e disponibilidade.</p></div><button className="p-btn p-primary" onClick={()=>setEditing(null)}>+ Novo item</button></div><Notice error={error} ok={notice}/>{products.length? <div className="item-list">{products.map(p=><div className="item-entry" key={p.id}><div className="item-image">{p.photo?<img src={p.photo} alt=""/>:p.emoji||'🍽️'}</div><div className="item-text"><strong>{p.name}</strong><span>{p.cat} · {BRL(p.price)}</span><small>{p.active?'Ativo':'Oculto'} · {models.some(m=>m.id===p.modelId && m.active)?'3D disponível':'Sem modelo 3D'}</small></div><div className="item-buttons"><button onClick={()=>setEditing(p)}>Editar</button><button disabled={busy || models.some(m=>m.id===p.modelId && m.active)} onClick={()=>askModel(p)}>Solicitar AR</button><button className="danger" onClick={()=>remove(p)}>Excluir</button></div></div>)}</div>:<p className="empty">Nenhum item cadastrado. Comece pelo primeiro prato.</p>}</section>}
-    {tab==='requests' && <section className="panel"><h2>Solicitações de modelos AR</h2><p className="subtle">Acompanhe aqui as etapas de produção. O prazo previsto é de até 7 dias, sujeito à análise das fotos enviadas.</p><Notice error={reqError}/>{myRequests.length?myRequests.map(q=><div className="request-row" key={q.id}><div><strong>{q.productName}</strong><small>{q.createdAt ? new Date(q.createdAt).toLocaleDateString('pt-BR') : 'Enviado agora'}</small></div><span className="status-tag">{{pending:'Recebido',in_progress:'Em produção',delivered:'Entregue',rejected:'Precisa de revisão'}[q.status]||q.status}</span></div>):<p className="empty">Você ainda não solicitou modelos.</p>}</section>}
-    {tab==='orders' && <RestaurantOrders rid={rid}/>}
-    {tab==='settings' && <RestaurantSettings r={r}/>}
-  </div>{editing!==undefined && <ProductEditor rid={rid} product={editing} onClose={()=>setEditing(undefined)}/>}</div>;
+  return <><StudioPanel
+     r={r} user={user} admin={admin} products={products} models={models} myRequests={myRequests}
+     pendingPub={pendingPub} lastPub={lastPub} url={url} notice={notice}
+     errProduct={error} errRequests={reqError} errPublication={pubError} busy={busy}
+     requestPublish={requestPublish} onAdd={()=>setEditing(null)} onEdit={setEditing}
+     onRemove={remove} onRequestModel={askModel}
+     renderSettings={section=> <RestaurantSettings r={r} mode={section}/>}
+     renderOrders={()=> <RestaurantOrders rid={rid}/>}
+     onGo={navigate}
+   />{editing!==undefined&&<div className="platform-page"><ProductEditor rid={rid} product={editing} onClose={()=>setEditing(undefined)}/></div>}</>;
 }
 function Overview({user,admin}) {
   const [restaurants,error]=useLive('restaurants',['ownerUid','==',user.uid]);
@@ -264,7 +249,7 @@ function Overview({user,admin}) {
   const create=async(e)=>{e.preventDefault();if(!name.trim())return;setBusy(true);setNotice('');try{
     const d=await addDoc(collection(db,'restaurants'),{ownerUid:user.uid,name:name.trim().slice(0,90),tagline:'Conheça nosso cardápio em 3D.',whatsapp:'',instagram:'',instagramName:'',instagramBio:'',niche:'',address:'',cover:'',logo:'',accentColor:'#667843',slug:'',publicationStatus:'draft',published:false,createdAt:now(),updatedAt:now()});navigate(`/painel/restaurante/${d.id}`);
   }catch(e){setNotice(errText(e));}finally{setBusy(false);}};
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap"><div className="dashboard-title"><div><div className="eyebrow">ÁREA DO ESTABELECIMENTO</div><h1>Olá, {user.displayName?.split(' ')[0] || 'bem-vindo'}.</h1><p>Organize seus estabelecimentos e os modelos AR.</p></div><div className="panel-title-actions">{admin&&<A href="/gestor" className="p-btn p-outline">Central do gestor</A>}<button className="p-btn p-outline" onClick={async()=>{await signOut(auth);navigate('/',true);}}>Sair da conta</button></div></div><section className="panel"><h2>Seus restaurantes</h2><Notice error={error}/>{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><div className="restaurant-entry" key={r.id}><div><strong>{r.name}</strong><p>{r.published?'Publicado': 'Em preparação / aguardando aprovação'}</p></div><A href={`/painel/restaurante/${r.id}`} className="p-btn p-outline">Gerenciar →</A></div>)}{!restaurants.some(r=>r.ownerUid===user.uid)&&<p className="empty">Nenhum restaurante cadastrado.</p>}</section><form className="panel create-rest" onSubmit={create}><h2>Adicionar estabelecimento</h2><p className="subtle">Cada restaurante recebe seu próprio endereço, produtos e painel.</p><div><input required maxLength={90} placeholder="Nome do restaurante" value={name} onChange={e=>setName(e.target.value)}/><button className="p-btn p-primary" disabled={busy}>{busy?'Criando…':'+ Criar restaurante'}</button></div><Notice error={notice}/></form></div></div>;
+  return <div className="platform-page account-home"><div className="account-head"><button className="account-logo" onClick={()=>navigate('/painel')}><span>◉</span> Mesa Studio</button><button className="account-logout" onClick={async()=>{await signOut(auth);navigate('/',true)}}>Sair da conta →</button></div><main className="account-container"><div className="account-heading"><span>ÁREA DO ESTABELECIMENTO</span><h1>Olá, {user.displayName?.split(' ')[0]||user.email?.split('@')[0]||'bem-vindo'}.</h1><p>Seu espaço para criar e gerenciar experiências gastronômicas.</p></div><div className="account-kpi"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{restaurants.filter(x=>x.published).length}</strong><span>Cardápios publicados</span></div><div><strong>{restaurants.filter(x=>!x.published).length}</strong><span>Em preparação</span></div></div><div className="account-list-head"><div><h2>Seus estabelecimentos</h2><p>Escolha um restaurante para continuar o gerenciamento.</p></div></div><Notice error={error}/><div className="account-grid">{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><button className="account-restaurant" key={r.id} onClick={()=>navigate(`/painel/restaurante/${r.id}`)}><div className="account-cover">{r.cover?<img src={r.cover} alt=""/>:<span>🍽️</span>}</div><div className="account-restaurant-info"><div><b>{r.name}</b><span>{r.published?'● Publicado':'◌ Em preparação'}</span></div><p>{r.niche||'Estabelecimento gastronômico'}</p><small>Gerenciar cardápio →</small></div></button>)}</div>{!restaurants.some(r=>r.ownerUid===user.uid)&&<div className="account-empty">Você ainda não cadastrou nenhum estabelecimento. Comece criando o primeiro.</div>}<form className="account-create" onSubmit={create}><div><span>NOVO ESTABELECIMENTO</span><h2>Vamos criar algo especial?</h2><p>Comece pelo nome. Depois você poderá adicionar fotos, produtos, preços e personalizar o cardápio.</p></div><div><label htmlFor="account-business-name">Nome do estabelecimento</label><input id="account-business-name" required maxLength={90} placeholder="Ex.: Pizzaria da Praça" value={name} onChange={e=>setName(e.target.value)}/><button disabled={busy}>{busy?'Criando...':'Criar estabelecimento →'}</button></div><Notice error={notice}/></form></main></div>;
 }
 function PlatformEditor({site}) {
   const [f,setF]=useState({...site}),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -438,18 +423,18 @@ function Root() {
   // Sessão Google persistente: sem exibir a landing nem o login ao abrir ou voltar.
   // Só redirecionamos rotas de apresentação; links de cardápios seguem públicos.
   useEffect(()=>{if(shouldRedirectToBusiness(path,!!user))navigate('/painel',true);},[user,path]);
-  if(path==='/menu/demo') return <Consumer demo/>;
+  if(path==='/menu/demo') return <Busy>Cardápio não encontrado.</Busy>;
   if(path.startsWith('/menu/'))return <Consumer handle={decodeMenuHandle(path)}/>;
   if(user===undefined)return <Busy>Restaurando sua sessão…</Busy>;
   if(shouldRedirectToBusiness(path,!!user))return <Busy>Abrindo sua gestão…</Busy>;
-  if(path==='/entrar')return <Login user={null} site={site}/>;
+  if(path==='/entrar')return <AuthPage site={site} go={navigate}/>;
   if(path==='/painel' || path.startsWith('/painel/') || path==='/gestor'){
     if(!configured)return <Busy>O serviço está temporariamente indisponível. Tente novamente mais tarde.</Busy>;
-    if(!user)return <Login user={null} site={site}/>;
+    if(!user)return <AuthPage site={site} go={navigate}/>;
     if(path==='/gestor')return admin===undefined?<Busy>Verificando permissão…</Busy>:admin?<Admin user={user} site={site}/>:<Busy>Você não tem permissão para acessar esta página.</Busy>;
     if(path.startsWith('/painel/restaurante/'))return <RestaurantPanel key={path} rid={path.split('/')[3]} user={user} admin={admin===true}/>;
     return <Overview user={user} admin={admin===true}/>;
   }
-  return <Landing user={null} site={site}/>;
+  return <MarketingLanding site={site} go={navigate}/>;
 }
 createRoot(document.getElementById('root')).render(<Root/>);
