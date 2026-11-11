@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom';
 import {ArrowLeft,ArrowRight,ShoppingBag,Plus,Minus, X, Search, MapPin, Instagram, MessageCircle, Box, ScanLine, Camera, ChevronRight, Heart, UtensilsCrossed, SlidersHorizontal, Check, Globe} from 'lucide-react';
 import {Viewer, ARSession} from './ar-viewer.jsx';
 import './savor-menu.css';
+import {paletteById,fontById,clampCover,checkoutIntro,getPromotions} from './menu-design.js';
 
 const money=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const tel=v=>String(v||'').replace(/\D/g,'');
@@ -10,6 +11,9 @@ function Image({src,alt='',className=''}){return src?<img className={className} 
 export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},onOrder=()=>{}}){
  const [cat,setCat]=useState('Todos'),[search,setSearch]=useState(''),[opened,setOpened]=useState(null),[count,setCount]=useState(1),[cart,setCart]=useState({}),[cartOpen,setCartOpen]=useState(false),[mode,setMode]=useState('photo'),[ar,setAr]=useState(null),[viewerError,setViewerError]=useState(''),[clientName,setClientName]=useState(''),[notes,setNotes]=useState(''),[msg,setMsg]=useState('');
  const [economy,setEconomy]=useState(false);
+ const [promoIndex,setPromoIndex]=useState(0);
+ const promos=useMemo(()=>getPromotions(restaurant),[restaurant]);
+ useEffect(()=>{setPromoIndex(0);if(promos.length<2)return;const timer=setInterval(()=>setPromoIndex(n=>(n+1)%promos.length),3000);return()=>clearInterval(timer);},[promos.length,restaurant.id,restaurant.promotions]);
  const available=useMemo(()=>products.filter(p=>p.active!==false && !(Number.isFinite(p.stock)&&p.stock===0)),[products]);
  const filtered=useMemo(()=>available.filter(p=>(cat==='Todos'||p.cat===cat)&&(!search||[p.name,p.cat,p.description].join(' ').toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))),[available,cat,search]);
  const total=available.reduce((s,p)=>s+Number(p.price||0)*(cart[p.id]||0),0);
@@ -32,13 +36,16 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
   const rows=available.filter(p=>cart[p.id]).map(p=>({name:p.name,quantity:cart[p.id],price:Number(p.price)}));
   if(!rows.length)return;
   const code=onOrder({customerName:clientName.trim(),notes:notes.trim(),items:rows});
-  const lines=[`*Pedido — ${restaurant.name}*`,...(code?[`Referência #${code}`]:[]),'',...rows.map(x=>`${x.quantity}x ${x.name} — ${money(x.price*x.quantity)}`),'',`*Total: ${money(total)}*`,...(clientName.trim()?[`Nome: ${clientName.trim()}`]:[]),...(notes.trim()?[`Observações: ${notes.trim()}`]:[]),'','Olá! Quero confirmar este pedido.'];
+  const lines=[`*Pedido — ${restaurant.name}*`,...(code?[`Referência #${code}`]:[]),'',...rows.map(x=>`${x.quantity}x ${x.name} — ${money(x.price*x.quantity)}`),'',`*Total: ${money(total)}*`,...(clientName.trim()?[`Nome: ${clientName.trim()}`]:[]),...(notes.trim()?[`Observações: ${notes.trim()}`]:[]),'',checkoutIntro(restaurant.whatsappIntro)];
   onEvent('order_intent');window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`,'_blank','noopener,noreferrer');
  };
- const publicColor=/^#[0-9a-f]{6}$/i.test(restaurant.accentColor||'')?restaurant.accentColor:'#3e4a2b';
- return <div className="savor-client" data-preset={restaurant.themePreset||'classico'} style={{'--sm-olive':publicColor}}>
-  <div className="sm-home-hero" style={restaurant.cover?{backgroundImage:`linear-gradient(180deg,rgba(21,20,13,.12),rgba(21,20,13,.82)),url(${restaurant.cover})`}:undefined}>
+ const palette=paletteById(restaurant.menuPalette);
+ const font=fontById(restaurant.menuFont);
+ const design={'--sm-olive':palette.accent,'--sm-cream':palette.cream,'--sm-cream2':palette.cream2,'--sm-ink':palette.ink,'--sm-muted':palette.muted,'--sm-font':font.css,'--sm-heading-font':font.css};
+ return <div className="savor-client" data-preset={restaurant.menuPalette?'classico':(restaurant.themePreset||'classico')} style={design}>
+  <div className="sm-home-hero" style={restaurant.cover?{backgroundImage:`linear-gradient(180deg,rgba(21,20,13,.12),rgba(21,20,13,.82)),url(${restaurant.cover})`,backgroundPosition:`${clampCover(restaurant.coverX)}% ${clampCover(restaurant.coverY)}%`}:undefined}>
    <div className="sm-home-top"><div className="sm-wordmark"><span className="sm-logomark">{restaurant.logo?<img src={restaurant.logo} alt=""/>:<UtensilsCrossed size={20}/>}</span><span>{restaurant.name}</span></div><div className="sm-top-btns"><button onClick={()=>setCartOpen(true)} title="Abrir carrinho" aria-label="Carrinho"><ShoppingBag size={21}/>{numItems>0&&<i>{numItems}</i>}</button></div></div>
+   {promos.length>0&&<div className="sm-promo" key={promoIndex} aria-live="off"><small>PROMOÇÃO ESPECIAL</small><strong>{promos[promoIndex]?.title}</strong><p>{promos[promoIndex]?.detail}</p>{promos.length>1&&<div className="sm-promo-pips">{promos.map((_,i)=><i key={i} className={i===promoIndex?'on':''}/>)}</div>}</div>}
    <div className="sm-hero-copy"><span className="sm-eyebrow">CARDÁPIO DIGITAL · EXPERIÊNCIA IMERSIVA</span><h1>{restaurant.name}</h1><p>{restaurant.tagline||restaurant.niche||'Conheça nosso cardápio.'}</p><button onClick={()=>document.getElementById('sm-menu-list')?.scrollIntoView({behavior:'smooth'})}>Explorar o cardápio <span><ArrowRight size={18}/></span></button></div>
   </div>
   <div className="sm-body" id="sm-menu-list">
@@ -57,10 +64,10 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
   </div>
   {numItems>0&&!cartOpen&&<button className="sm-floating-cart" onClick={()=>setCartOpen(true)}><ShoppingBag size={20}/>{numItems} {numItems===1?'item':'itens'} <b>{money(total)}</b><ChevronRight size={19}/></button>}
   {chosen&&<div className="sm-detail" role="dialog" aria-modal="true" aria-label={`Detalhes de ${chosen.name}`}>
-    <div className="sm-detail-top"><button onClick={()=>setOpened(null)} aria-label="Voltar"><ArrowLeft/></button><span>{chosen.cat||'Cardápio'}</span><button onClick={()=>setCartOpen(true)} aria-label="Carrinho"><ShoppingBag/></button></div>
+    <div className="sm-detail-top"><button onClick={()=>setOpened(null)} aria-label="Voltar"><ArrowLeft/></button><span>{chosen.name}</span><button onClick={()=>setCartOpen(true)} aria-label="Carrinho"><ShoppingBag/></button></div>
     <div className="sm-detail-image">{mode==='3d'&&chosen.url?<Viewer product={chosen} onError={m=>{setViewerError(m);onEvent('error',m)}}/>:<Image src={chosen.photo} alt={chosen.name}/>}</div>
     {chosen.url&&<div className="sm-view-options"><button className={mode==='photo'?'active':''} onClick={()=>setMode('photo')}><Camera size={16}/> Foto</button><button className={mode==='3d'?'active':''} onClick={()=>setMode('3d')}><Box size={16}/> Modelo 3D</button></div>}
-    <div className="sm-detail-copy"><small>{chosen.cat||'ESPECIALIDADE'}</small><h1>{chosen.name}</h1><strong className="sm-price">{money(chosen.price)}</strong><p>{chosen.description}</p>{Array.isArray(chosen.ingredients)&&chosen.ingredients.length>0&&<div><h3>Ingredientes</h3><p>{chosen.ingredients.join(' · ')}</p></div>}{viewerError&&<p role="alert">{viewerError}</p>}</div>
+    <div className="sm-detail-copy"><small>DETALHES DO PRODUTO</small><h1>{chosen.name}</h1><strong className="sm-price">{money(chosen.price)}</strong><div className="sm-facts"><span>Categoria: {chosen.cat||'Outros'}</span>{Number(chosen.kcal)>0&&<span>{chosen.kcal} kcal</span>}</div>{chosen.description&&<p>{chosen.description}</p>}{Array.isArray(chosen.ingredients)&&chosen.ingredients.length>0&&<div><h3>Ingredientes</h3><ul className="sm-ingredient-tags">{chosen.ingredients.map((ingredient,i)=><li key={i}>{ingredient}</li>)}</ul></div>}{viewerError&&<p role="alert">{viewerError}</p>}</div>
     <div className="sm-detail-actions">{chosen.url&&<button className="sm-ar-action" onClick={startAR}><ScanLine size={20}/> Visualizar na minha mesa (AR)</button>}<div className="sm-purchase"><div><button onClick={()=>setCount(Math.max(1,count-1))}><Minus size={19}/></button><strong>{count}</strong><button onClick={()=>setCount(Math.min(50,count+1))}><Plus size={19}/></button></div><button onClick={()=>{change(chosen.id,(cart[chosen.id]||0)+count);setOpened(null)}}>Adicionar · {money(chosen.price*count)} <ArrowRight size={18}/></button></div></div>
   </div>}
   {cartOpen&&<div className="sm-cart-overlay" onClick={()=>setCartOpen(false)}><div className="sm-cart-drawer" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Carrinho"><div className="sm-cart-head"><div><small>SEU PEDIDO</small><h2>Carrinho</h2></div><button onClick={()=>setCartOpen(false)} aria-label="Fechar carrinho"><X/></button></div>{numItems?available.filter(p=>cart[p.id]).map(p=><div className="sm-cart-row" key={p.id}><Image src={p.photo} alt={p.name}/><div><b>{p.name}</b><small>{money(p.price)} cada</small><div><button onClick={()=>change(p.id,cart[p.id]-1)}><Minus size={16}/></button><strong>{cart[p.id]}</strong><button onClick={()=>change(p.id,cart[p.id]+1)}><Plus size={16}/></button></div></div><strong>{money(p.price*cart[p.id])}</strong></div>):<p className="sm-empty">Seu carrinho está vazio.</p>}

@@ -160,13 +160,14 @@ function ProductEditor({rid, product, onClose}) {
 }
 function RestaurantSettings({r,mode='all'}) {
   const [f,setF] = useState(()=>({...r}));
+  const [drag,setDrag]=useState(null);
   const [busy,setBusy]=useState(false), [error,setError]=useState(''), [ok,setOk]=useState('');
   useEffect(()=>setF({...r}),[r?.id]);
   const save = async(e) => { e.preventDefault();setBusy(true);setError('');setOk('');try {
     const whatsapp = f.whatsapp.replace(/\D/g,'');
     if (whatsapp && !/^55\d{10,11}$/.test(whatsapp)) throw Error('WhatsApp precisa ter DDI 55 + DDD + número. Ex.: 5511999999999.');
     
-    await updateDoc(restaurantDoc(r.id),{name:f.name.trim().slice(0,90),tagline:f.tagline.trim().slice(0,250),whatsapp, instagram:cleanHandle(f.instagram),instagramName:f.instagramName.trim().slice(0,90),instagramBio:f.instagramBio.trim().slice(0,250),niche:(f.niche||'').trim().slice(0,80),address:(f.address||'').trim().slice(0,240),cover:f.cover || '',logo:f.logo || '',accentColor:/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843',updatedAt:now()});
+    await updateDoc(restaurantDoc(r.id),{name:f.name.trim().slice(0,90),tagline:f.tagline.trim().slice(0,250),whatsapp, instagram:cleanHandle(f.instagram),instagramName:f.instagramName.trim().slice(0,90),instagramBio:f.instagramBio.trim().slice(0,250),niche:(f.niche||'').trim().slice(0,80),address:(f.address||'').trim().slice(0,240),cover:f.cover || '',logo:f.logo || '',coverX:Math.max(0,Math.min(100,Number(f.coverX??50))),coverY:Math.max(0,Math.min(100,Number(f.coverY??50))),whatsappIntro:String(f.whatsappIntro||'').trim().slice(0,400),updatedAt:now()});
     setOk('Configurações salvas.');
   }catch(e){setError(errText(e));}finally{setBusy(false);}};
   const cover = async (file, field='cover')=>{if(!file)return;setBusy(true);setError('');try{const {url} = await uploadMedia(r.id,file);setF(v=>({...v,[field]:url}));setOk('Foto pronta! Toque em Salvar estabelecimento para concluir.');}catch(e){setError(errText(e));}finally{setBusy(false);}};
@@ -179,7 +180,9 @@ function RestaurantSettings({r,mode='all'}) {
     <label className="span-2">Bio do card Instagram<textarea rows={2} value={f.instagramBio||''} onChange={e=>setF({...f,instagramBio:e.target.value})}/></label></>}
     {mode!=='contacts'&&<><label>Foto da capa<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0])}/></label><label>Logotipo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>cover(e.target.files[0],'logo')}/></label>
     {f.logo && <img className="preview-pic" alt="Logotipo" src={f.logo}/>}
-    <label>Cor de destaque do estabelecimento<input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(f.accentColor||'')?f.accentColor:'#667843'} onChange={e=>setF({...f,accentColor:e.target.value})}/></label></>}
+    {f.cover&&<div className="span-2 cover-position-editor"><strong>Enquadramento da capa</strong><p>Arraste a imagem para centralizar o trecho importante. A capa sempre preencherá o hero, sem bordas.</p><div className="cover-drag-preview" role="img" aria-label="Prévia interativa de enquadramento" style={{backgroundImage:`linear-gradient(#1112,#1116),url(${f.cover})`,backgroundPosition:`${f.coverX??50}% ${f.coverY??50}%`}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setDrag({x:e.clientX,y:e.clientY,px:Number(f.coverX??50),py:Number(f.coverY??50)});}} onPointerMove={e=>{if(!drag)return;const box=e.currentTarget.getBoundingClientRect();setF(v=>({...v,coverX:Math.max(0,Math.min(100,Math.round(drag.px-(e.clientX-drag.x)*100/Math.max(box.width,1)))),coverY:Math.max(0,Math.min(100,Math.round(drag.py-(e.clientY-drag.y)*100/Math.max(box.height,1))))}));}} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)}><span>Arraste para reposicionar</span></div><div className="cover-ranges"><label>Horizontal ({f.coverX??50}%)<input type="range" min="0" max="100" value={f.coverX??50} onChange={e=>setF({...f,coverX:Number(e.target.value)})}/></label><label>Vertical ({f.coverY??50}%)<input type="range" min="0" max="100" value={f.coverY??50} onChange={e=>setF({...f,coverY:Number(e.target.value)})}/></label></div></div>}
+    {mode!=='contacts'&&<label className="span-2">Mensagem de apresentação do pedido no WhatsApp<textarea rows={3} maxLength={400} value={f.whatsappIntro||''} placeholder="Olá! Quero confirmar meu pedido." onChange={e=>setF({...f,whatsappIntro:e.target.value})}/><small>Essa mensagem é acrescentada ao pedido, que mantém itens, valores e total.</small></label>}
+    <p className="subtle span-2">A fonte e a paleta agora são escolhidas na aba Aparência (5 combinações de contraste).</p></>}
     <p className="subtle span-2">A publicação do cardápio é aprovada pela equipe. Para solicitar a publicação, use o botão no topo do painel.</p>
   </div><Notice error={error} ok={ok}/><button className="p-btn p-primary" disabled={busy}>{busy?'Salvando…':'Salvar estabelecimento'}</button></form>;
 }

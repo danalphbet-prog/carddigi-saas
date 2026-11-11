@@ -126,7 +126,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
 
   useEffect(() => {
     let destroyed = false, session = null, renderer = null, xrLight = null, anchor = null;
-    let hitTestSource = null, viewerSpace = null, hitCandidate = null, controller = null, onSelect = null, model = null;
+    let hitTestSource = null, lowerHitTestSource = null, viewerSpace = null, hitCandidate = null, controller = null, onSelect = null, model = null;
     let last = '';
     const say = (v) => { if (!destroyed && v !== last) { last = v; setStatus(v); } };
     const scene = new THREE.Scene();
@@ -152,7 +152,9 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     const surfaceUp = new THREE.Vector3();
     const camPos = new THREE.Vector3(), dishPos = new THREE.Vector3();
     let dwellStart = 0, promptShown = false, nearNow = false;
-    let stableFrames = 0, hasSmoothed = false;
+    let stableFrames = 0, hasSmoothed = false, lastSurfaceAt = 0;
+    const MIN_HITS = 2; // Dispensa os seis quadros exigidos na versão anterior.
+    const MIN_UP_DOT = 0.82; // Mesa quase horizontal, com pequena tolerância à inclinação.
     let nextSocial = 0, socialUntil = 0, socialOn = false, socialVariant = 0;
     const smoothPos = new THREE.Vector3(), observedPos = new THREE.Vector3();
     const smoothQuat = new THREE.Quaternion(), observedQuat = new THREE.Quaternion();
@@ -161,8 +163,19 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
 
     const makeHitSource = async () => {
       hitTestSource?.cancel?.();
-      hitTestSource = null;
+      lowerHitTestSource?.cancel?.();
+      hitTestSource = null; lowerHitTestSource = null;
       hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+      // Segundo raio levemente inclinado para baixo; permite mirar a mesa
+      // sem inclinar tanto o telefone, se a implementação WebXR aceitar XRRay.
+      if (typeof XRRay !== 'undefined') {
+        try {
+          lowerHitTestSource = await session.requestHitTestSource({
+            space: viewerSpace,
+            offsetRay: new XRRay({ x:0, y:0, z:0 },{ x:0, y:-0.22, z:-1, w:0 })
+          });
+        } catch { lowerHitTestSource = null; } // Mantém o raio principal.
+      }
     };
     // Recalcular: descarta a superfície fixada e a âncora, e refaz o hit-test do zero.
     actions.current.recalc = async () => {
@@ -174,7 +187,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       reticle.visible = false;
       setPlaced(false);
       pusher.position.set(0, 0, 0);
-      dwellStart = 0; stableFrames = 0; hasSmoothed = false; socialOn = false; setSocialShown(false);
+      dwellStart = 0; stableFrames = 0; hasSmoothed = false; lastSurfaceAt = 0; socialOn = false; setSocialShown(false);
       try { await makeHitSource(); } catch { /* o loop continua tentando */ }
       say('Superfície recalculada. Aponte para a mesa.');
     };
@@ -217,7 +230,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
         controller = renderer.xr.getController(0);
         scene.add(controller);
         onSelect = async () => {
-          if (placement.visible || !reticle.visible || !hitCandidate || stableFrames < 6) return;
+          if (placement.visible || !reticle.visible || !hitCandidate || stableFrames < MIN_HITS) return;
           const hit = hitCandidate;
           placement.matrix.copy(reticle.matrix);
           placement.visible = true;
@@ -248,13 +261,14 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
               if (!placement.visible && hitTestSource) {
                 reticle.visible = false;
                 hitCandidate = null;
-                for (const hit of frame.getHitTestResults(hitTestSource)) {
+                const hits = [...frame.getHitTestResults(hitTestSource), ...(lowerHitTestSource ? frame.getHitTestResults(lowerHitTestSource) : [])];
+                for (const hit of hits) {
                   const pose = hit.getPose(ref);
                   if (!pose) continue;
                   hitMatrix.fromArray(pose.transform.matrix);
                   surfaceRotation.setFromRotationMatrix(hitMatrix);
                   surfaceUp.set(0, 1, 0).applyQuaternion(surfaceRotation);
-                  if (surfaceUp.y < 0.92) continue;
+                  if (surfaceUp.y < MIN_UP_DOT) continue;
                   observedPos.setFromMatrixPosition(hitMatrix);
                   observedQuat.setFromRotationMatrix(hitMatrix);
                   if (!hasSmoothed || smoothPos.distanceTo(observedPos) > 0.14) {
@@ -264,17 +278,19 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
                     hasSmoothed = true;
                   } else {
                     const delta = smoothPos.distanceTo(observedPos);
-                    stableFrames = delta < 0.035 ? Math.min(20, stableFrames + 1) : 0;
-                    smoothPos.lerp(observedPos, 0.19);
-                    smoothQuat.slerp(observedQuat, 0.16);
+                    // Movimentos normais da mão não invalidam a mesa detectada.
+                    stableFrames = delta < 0.15 ? Math.min(20, stableFrames + 1) : 1;
+                    smoothPos.lerp(observedPos, 0.3);
+                    smoothQuat.slerp(observedQuat, 0.25);
                   }
                   reticle.matrix.compose(smoothPos, smoothQuat, one);
-                  reticle.visible = stableFrames >= 6;
+                  reticle.visible = stableFrames >= MIN_HITS;
+                  lastSurfaceAt = performance.now();
                   hitCandidate = hit;
                   break;
                 }
                 if (!hitCandidate) { stableFrames = 0; hasSmoothed = false; }
-                say(reticle.visible ? 'Superfície estável ✓ Toque na mesa para fixar.' : hitCandidate ? 'Confirmando a superfície… mantenha o celular estável.' : 'Mova o celular devagar até uma mesa bem iluminada.');
+                say(reticle.visible ? 'Mesa detectada ✓ Toque na tela para fixar o prato.' : hitCandidate ? 'Mesa encontrada! Segure por um instante…' : lastSurfaceAt && performance.now()-lastSurfaceAt<3500 ? 'Perdemos a mesa de vista. Aponte novamente.' : 'Aponte para uma mesa iluminada e mova o celular lentamente em um pequeno arco.');
               }
             }
             if (placement.visible && ref) {
@@ -338,6 +354,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       renderer?.setAnimationLoop(null);
       if (controller && onSelect) controller.removeEventListener('select', onSelect);
       hitTestSource?.cancel?.();
+      lowerHitTestSource?.cancel?.();
       anchor?.delete?.();
       session?.end?.().catch(() => {});
       xrLight?.dispose?.();
@@ -357,6 +374,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     </div>
     <div className="ar-bottom">
       <p aria-live="polite">{status}</p>
+      {!placed&&<p className="hint">Dica: uma mesa com textura e boa iluminação é detectada mais facilmente. Evite balançar o celular.</p>}
       {placed && <p className="hint">Prato fixado. Circule ao redor para ver de todos os lados.</p>}
       <button className="ar-btn" onClick={() => actions.current.recalc?.()}>Recalcular superfície</button>
     </div>

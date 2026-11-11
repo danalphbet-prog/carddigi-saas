@@ -84,6 +84,30 @@
         },
         "publicationStatus": {
           ".validate": "newData.isString() && (newData.val() === 'draft' || newData.val() === 'approved' || newData.val() === 'rejected' || newData.val() === 'paused')"
+        },
+        "menuPalette": {
+          ".validate": "newData.isString() && (newData.val() === 'oliva' || newData.val() === 'areia' || newData.val() === 'terracota' || newData.val() === 'oceano' || newData.val() === 'grafite')"
+        },
+        "menuFont": {
+          ".validate": "newData.isString() && (newData.val() === 'dm-sans' || newData.val() === 'manrope' || newData.val() === 'poppins' || newData.val() === 'inter' || newData.val() === 'lora' || newData.val() === 'playfair')"
+        },
+        "whatsappIntro": {
+          ".validate": "newData.isString() && newData.val().length <= 400"
+        },
+        "promotionsEnabled": {
+          ".validate": "newData.isBoolean()"
+        },
+        "promotions": {
+          ".validate": "newData.numChildren() <= 5",
+          "$idx": {
+            ".validate": "newData.hasChildren(['title','detail']) && newData.child('title').isString() && newData.child('title').val().length <= 90 && newData.child('detail').isString() && newData.child('detail').val().length <= 180"
+          }
+        },
+        "coverX": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+        },
+        "coverY": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
         }
       }
     },
@@ -139,6 +163,13 @@
             }
           }
         }
+      }
+    },
+    "integrations": {
+      "$rid": {
+        ".read": "auth != null && (auth.token.platformAdmin === true || root.child('restaurants').child($rid).child('ownerUid').val() === auth.uid)",
+        ".write": "auth != null && (auth.token.platformAdmin === true || root.child('restaurants').child($rid).child('ownerUid').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['webhookUrl','webhookReady','updatedAt']) && newData.child('webhookUrl').isString() && newData.child('webhookUrl').val().length <= 500 && (newData.child('webhookUrl').val() === '' || newData.child('webhookUrl').val().matches(/^https:\\/\\/[^ ]+$/)) && newData.child('webhookReady').val() === false && newData.child('updatedAt').isNumber()"
       }
     }
   }
