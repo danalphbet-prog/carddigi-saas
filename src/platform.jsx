@@ -32,13 +32,15 @@ function Notice({error, ok}) { return <>{error && <p className="p-error" role="a
 function useLive(path, filter) {
   const [data, setData] = useState([]);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    if (!db || !path) return;
+    if (!db || !path) {setLoaded(true);return;}
+    setLoaded(false);
     const ref = collection(db, path);
     const source = filter ? query(ref, where(filter[0], filter[1], filter[2])) : ref;
-    return onSnapshot(source, s => {setData(s.docs.map(x => ({id:x.id, ...x.data()})));setError('');}, e => setError(errText(e)));
+    return onSnapshot(source, s => {setData(s.docs.map(x => ({id:x.id, ...x.data()})));setError('');setLoaded(true);}, e => {setError(errText(e));setLoaded(true);});
   }, [path, JSON.stringify(filter)]);
-  return [data, error];
+  return [data, error, loaded];
 }
 function useRestaurant(rid) {
   const [restaurant, setRestaurant] = useState(null);
@@ -53,13 +55,15 @@ function useRestaurant(rid) {
 function useProducts(rid, forConsumer = false) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    if (!db || !rid) return;
+    if (!db || !rid) {setLoaded(true);return;}
+    setLoaded(false);
     const base = productCollection(rid);
     const source = forConsumer ? query(base, where('active','==',true)) : base;
-    return onSnapshot(source, s => {setItems(s.docs.map(x => ({id:x.id,...x.data()})));setError('');}, e => setError(errText(e)));
+    return onSnapshot(source, s => {setItems(s.docs.map(x => ({id:x.id,...x.data()})));setError('');setLoaded(true);}, e => {setError(errText(e));setLoaded(true);});
   }, [rid, forConsumer]);
-  return [items, error];
+  return [items, error, loaded];
 }
 function SiteHeader({user, brand}) {return <header className="site-header"><A href="/" className="brand"><span className="brand-mark">◉</span> {brand}</A><nav><A href="/painel">Meus restaurantes</A>{user ? <A href="/painel" className="nav-action">Painel</A> : <A href="/entrar" className="nav-action">Entrar</A>}</nav></header>;}
 function useResolvedRestaurant(handle) {
@@ -92,8 +96,8 @@ function Consumer({handle}) {
   const resolved=useResolvedRestaurant(handle);
   const rid=resolved.rid;
   const [r, state]=useRestaurant(rid);
-  const [prods,error]=useProducts(rid,true);
-  const [models]=useLive('modelCatalog');
+  const [prods,error,productsLoaded]=useProducts(rid,true);
+  const [models,,modelsLoaded]=useLive('modelCatalog');
   const onMenuEvent=React.useCallback((type,message)=>trackEvent(rid,type,message),[rid]);
   const onOrder=React.useCallback((order)=>createOrderIntent(rid,order),[rid]);
   useEffect(()=>{
@@ -105,8 +109,24 @@ function Consumer({handle}) {
     return()=>{unlisten();window.removeEventListener('pagehide',onHide)};
   },[rid,resolved.loading,state,r?.published]);
   useEffect(()=>{if(rid&&error)void trackEvent(rid,'error',error)},[error,rid]);
+  // Mostra o aplicativo apenas depois de resolver estabelecimento, produtos e catálogo 3D.
+  // Erros e cardápios inexistentes também encerram o splash para exibir a mensagem apropriada.
+  useEffect(()=>{
+    if (configured && (resolved.loading || state==='loading' || (state==='ok' && r?.published && (!productsLoaded || !modelsLoaded)))) return;
+    // Espera também a capa do hero decodificar (ou até 3,5 s), evitando exibir metade da imagem.
+    let alive=true;
+    let timeout;
+    const reveal=()=>{if(alive)window.dispatchEvent(new Event('mezzira:ready'));};
+    if (!r?.published || !r?.cover) {reveal();return;}
+    const image=new Image();
+    image.onload=reveal;
+    image.onerror=reveal;
+    timeout=window.setTimeout(reveal,3500);
+    image.src=r.cover;
+    return()=>{alive=false;clearTimeout(timeout);image.onload=null;image.onerror=null;};
+  },[resolved.loading,state,r?.published,r?.cover,productsLoaded,modelsLoaded]);
   if(!configured)return <Busy>Não foi possível carregar o cardápio no momento.</Busy>;
-  if(resolved.loading||state==='loading')return <Busy>Abrindo cardápio…</Busy>;
+  if(resolved.loading||state==='loading'||(state==='ok'&&r?.published&&(!productsLoaded||!modelsLoaded)))return <Busy>Abrindo cardápio…</Busy>;
   if(!r||!r.published)return <Busy>Este cardápio não está publicado ou não existe.</Busy>;
   const mapped=prods.map(p=>({...p,url:models.find(m=>m.id===p.modelId&&m.active)?.url||'',photo:p.photo||'',ingredients:Array.isArray(p.ingredients)?p.ingredients:[],cat:p.cat||'Outros',price:Number(p.price||0),diameter:Number(p.diameter||.2),kcal:Number(p.kcal||0)}));
   const cats=['Todos',...new Set(mapped.map(p=>p.cat))];
@@ -252,7 +272,7 @@ function Overview({user,admin}) {
   const create=async(e)=>{e.preventDefault();if(!name.trim())return;setBusy(true);setNotice('');try{
     const d=await addDoc(collection(db,'restaurants'),{ownerUid:user.uid,name:name.trim().slice(0,90),tagline:'Conheça nosso cardápio em 3D.',whatsapp:'',instagram:'',instagramName:'',instagramBio:'',niche:'',address:'',cover:'',logo:'',accentColor:'#667843',slug:'',publicationStatus:'draft',published:false,createdAt:now(),updatedAt:now()});navigate(`/painel/restaurante/${d.id}`);
   }catch(e){setNotice(errText(e));}finally{setBusy(false);}};
-  return <div className="platform-page account-home"><div className="account-head"><button className="account-logo" onClick={()=>navigate('/painel')}><span>◉</span> Mesa Studio</button><button className="account-logout" onClick={async()=>{await signOut(auth);navigate('/',true)}}>Sair da conta →</button></div><main className="account-container"><div className="account-heading"><span>ÁREA DO ESTABELECIMENTO</span><h1>Olá, {user.displayName?.split(' ')[0]||user.email?.split('@')[0]||'bem-vindo'}.</h1><p>Seu espaço para criar e gerenciar experiências gastronômicas.</p></div><div className="account-kpi"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{restaurants.filter(x=>x.published).length}</strong><span>Cardápios publicados</span></div><div><strong>{restaurants.filter(x=>!x.published).length}</strong><span>Em preparação</span></div></div><div className="account-list-head"><div><h2>Seus estabelecimentos</h2><p>Escolha um restaurante para continuar o gerenciamento.</p></div></div><Notice error={error}/><div className="account-grid">{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><button className="account-restaurant" key={r.id} onClick={()=>navigate(`/painel/restaurante/${r.id}`)}><div className="account-cover">{r.cover?<img src={r.cover} alt=""/>:<span>🍽️</span>}</div><div className="account-restaurant-info"><div><b>{r.name}</b><span>{r.published?'● Publicado':'◌ Em preparação'}</span></div><p>{r.niche||'Estabelecimento gastronômico'}</p><small>Gerenciar cardápio →</small></div></button>)}</div>{!restaurants.some(r=>r.ownerUid===user.uid)&&<div className="account-empty">Você ainda não cadastrou nenhum estabelecimento. Comece criando o primeiro.</div>}<form className="account-create" onSubmit={create}><div><span>NOVO ESTABELECIMENTO</span><h2>Vamos criar algo especial?</h2><p>Comece pelo nome. Depois você poderá adicionar fotos, produtos, preços e personalizar o cardápio.</p></div><div><label htmlFor="account-business-name">Nome do estabelecimento</label><input id="account-business-name" required maxLength={90} placeholder="Ex.: Pizzaria da Praça" value={name} onChange={e=>setName(e.target.value)}/><button disabled={busy}>{busy?'Criando...':'Criar estabelecimento →'}</button></div><Notice error={notice}/></form></main></div>;
+  return <div className="platform-page account-home"><div className="account-head"><button className="account-logo" onClick={()=>navigate('/painel')}><span>◉</span> Mezzira Studio</button><button className="account-logout" onClick={async()=>{await signOut(auth);navigate('/',true)}}>Sair da conta →</button></div><main className="account-container"><div className="account-heading"><span>ÁREA DO ESTABELECIMENTO</span><h1>Olá, {user.displayName?.split(' ')[0]||user.email?.split('@')[0]||'bem-vindo'}.</h1><p>Seu espaço para criar e gerenciar experiências gastronômicas.</p></div><div className="account-kpi"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{restaurants.filter(x=>x.published).length}</strong><span>Cardápios publicados</span></div><div><strong>{restaurants.filter(x=>!x.published).length}</strong><span>Em preparação</span></div></div><div className="account-list-head"><div><h2>Seus estabelecimentos</h2><p>Escolha um restaurante para continuar o gerenciamento.</p></div></div><Notice error={error}/><div className="account-grid">{restaurants.filter(r=>r.ownerUid===user.uid).map(r=><button className="account-restaurant" key={r.id} onClick={()=>navigate(`/painel/restaurante/${r.id}`)}><div className="account-cover">{r.cover?<img src={r.cover} alt=""/>:<span>🍽️</span>}</div><div className="account-restaurant-info"><div><b>{r.name}</b><span>{r.published?'● Publicado':'◌ Em preparação'}</span></div><p>{r.niche||'Estabelecimento gastronômico'}</p><small>Gerenciar cardápio →</small></div></button>)}</div>{!restaurants.some(r=>r.ownerUid===user.uid)&&<div className="account-empty">Você ainda não cadastrou nenhum estabelecimento. Comece criando o primeiro.</div>}<form className="account-create" onSubmit={create}><div><span>NOVO ESTABELECIMENTO</span><h2>Vamos criar algo especial?</h2><p>Comece pelo nome. Depois você poderá adicionar fotos, produtos, preços e personalizar o cardápio.</p></div><div><label htmlFor="account-business-name">Nome do estabelecimento</label><input id="account-business-name" required maxLength={90} placeholder="Ex.: Pizzaria da Praça" value={name} onChange={e=>setName(e.target.value)}/><button disabled={busy}>{busy?'Criando...':'Criar estabelecimento →'}</button></div><Notice error={notice}/></form></main></div>;
 }
 function PlatformEditor({site}) {
   const [f,setF]=useState({...site}),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -387,7 +407,7 @@ function Admin({user,site}) {
   };
   const pending=publicationRequests.filter(q=>q.status==='pending').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const currentTab={publications:'Publicações',analytics:'Indicadores',errors:'Erros',queue:'Modelos AR',models:'Catálogo 3D',restaurants:'Restaurantes',site:'Site'}[tab];
-  return <div className="platform-page"><SiteHeader user={user} brand="Mesa Imersiva"/><div className="dashboard-wrap">
+  return <div className="platform-page"><SiteHeader user={user} brand="Mezzira"/><div className="dashboard-wrap">
     <div className="dashboard-title"><div><div className="eyebrow">CENTRAL DE GESTÃO</div><h1>Controle da plataforma</h1><p>Publicações, estabelecimentos, solicitações e qualidade do serviço, em um só lugar.</p></div><A href="/painel" className="p-btn p-outline">Minha conta</A></div>
     <div className="stat-grid"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{pending.length}</strong><span>Publicações pendentes</span></div><div><strong>{allEvents.filter(e=>e.type==='view').length}</strong><span>Visitas registradas</span></div><div><strong>{allErrors.length}</strong><span>Erros coletados</span></div></div>
     <div className="tabbar admin-tabbar">{[['publications','Aprovações'],['analytics','Gráficos'],['errors','Erros'],['queue','Solicitações AR'],['models','Biblioteca 3D'],['restaurants','Restaurantes'],['site','Site']].map(([id,name])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{name}{id==='publications'&&pending.length?` (${pending.length})`:''}</button>)}</div>
@@ -404,7 +424,7 @@ function Admin({user,site}) {
     {tab==='site' && <PlatformEditor site={site}/>}
   </div></div>;
 }
-const defaults = {name:'Mesa Imersiva',headline:'Uma experiência que começa antes da primeira garfada.',description:'Transforme o cardápio em uma experiência: modelos 3D, realidade aumentada e pedidos pelo WhatsApp.'};
+const defaults = {name:'Mezzira',headline:'Uma experiência que começa antes da primeira garfada.',description:'Transforme o cardápio em uma experiência: modelos 3D, realidade aumentada e pedidos pelo WhatsApp.'};
 function Root() {
   const [path,setPath]=useState(location.pathname),[user,setUser]=useState(undefined),[admin,setAdmin]=useState(undefined),[site,setSite]=useState(defaults);
   useEffect(()=>{const fn=()=>setPath(location.pathname);window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn)},[]);
@@ -426,6 +446,14 @@ function Root() {
   // Sessão Google persistente: sem exibir a landing nem o login ao abrir ou voltar.
   // Só redirecionamos rotas de apresentação; links de cardápios seguem públicos.
   useEffect(()=>{if(shouldRedirectToBusiness(path,!!user))navigate('/painel',true);},[user,path]);
+  // A tela inicial só desaparece depois da restauração de sessão e do redirecionamento.
+  // Para /menu/* o próprio Consumer aguarda a primeira leitura do Realtime Database.
+  useEffect(()=>{
+    if (path.startsWith('/menu/') && path!=='/menu/demo') return;
+    if (user===undefined || shouldRedirectToBusiness(path,!!user)) return;
+    if (path==='/gestor' && !!user && admin===undefined) return;
+    window.dispatchEvent(new Event('mezzira:ready'));
+  },[path,user,admin]);
   if(path==='/menu/demo') return <Busy>Cardápio não encontrado.</Busy>;
   if(path.startsWith('/menu/'))return <Consumer handle={decodeMenuHandle(path)}/>;
   if(user===undefined)return <Busy>Restaurando sua sessão…</Busy>;
