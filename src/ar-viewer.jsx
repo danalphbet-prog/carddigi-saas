@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { XREstimatedLight } from 'three/addons/webxr/XREstimatedLight.js';
 import { loadProduct, createFallbackLights, createContactShadow, disposeObject } from './scene.js';
-import { createDishSpatialCard, createInstagramSpatialCard, faceCardOnce } from './ar-cards.js';
+import { createDishSpatialCard, faceCardOnce } from './ar-cards.js';
 import './style.css';
 
 const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -102,30 +102,23 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
   addRef.current = onAdd;
   const [tooClose, setTooClose] = useState(false);
   const [ask, setAsk] = useState(false);
-  const [socialConfirm, setSocialConfirm] = useState(false);
+  const [transition, setTransition] = useState('opening');
 
   useEffect(() => {
     let destroyed = false, session = null, renderer = null, xrLight = null, anchor = null;
     let hitTestSource = null, lowerHitTestSource = null, viewerSpace = null, hitCandidate = null, controller = null, onSelect = null, model = null;
-    let dishCard = null, socialCard = null, modelReady = false;
+    let dishCard = null, modelReady = false;
     let last = '';
     const say = (v) => { if (!destroyed && v !== last) { last = v; setStatus(v); } };
-    let closing = false;
-    // Desativa a sessão ANTES de desmontar o overlay para evitar câmera presa.
-    actions.current.exit = async () => {
-      if (closing) return;
+    let closing = false, exitTimer;
+    // Comportamento original: a tela é fechada pelo React e o cleanup
+    // encerra a sessão. A transição é somente visual, não substitui o WebXR.
+    actions.current.exit = () => {
+      if (closing || destroyed) return;
       closing = true;
-      say('Fechando câmera…');
-      if (session) {
-        let timeoutId;
-        try {
-          await Promise.race([
-            session.end().catch(() => {}),
-            new Promise(resolve => { timeoutId = setTimeout(resolve, 1800); })
-          ]);
-        } finally { clearTimeout(timeoutId); }
-      }
-      if (!destroyed) closeRef.current();
+      setTransition('closing');
+      say('Voltando ao cardápio…');
+      exitTimer = setTimeout(() => { if (!destroyed) closeRef.current(); }, 260);
     };
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -153,7 +146,6 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     let stableFrames = 0, hasSmoothed = false, lastSurfaceAt = 0;
     const MIN_HITS = 2; // Dispensa os seis quadros exigidos na versão anterior.
     const MIN_UP_DOT = 0.82; // Mesa quase horizontal, com pequena tolerância à inclinação.
-    let nextSocial = 0, socialOn = false;
     const smoothPos = new THREE.Vector3(), observedPos = new THREE.Vector3();
     const smoothQuat = new THREE.Quaternion(), observedQuat = new THREE.Quaternion();
     const selectRay = new THREE.Raycaster();
@@ -186,7 +178,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       reticle.visible = false;
       setPlaced(false);
       pusher.position.set(0, 0, 0);
-      dwellStart = 0; stableFrames = 0; hasSmoothed = false; lastSurfaceAt = 0; socialOn = false; if (socialCard) socialCard.mesh.visible = false; setSocialConfirm(false);
+      dwellStart = 0; stableFrames = 0; hasSmoothed = false; lastSurfaceAt = 0;
       try { await makeHitSource(); } catch { /* o loop continua tentando */ }
       say('Superfície recalculada. Aponte para a mesa.');
     };
@@ -223,37 +215,28 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
           fallback.visible = true;
           if (!destroyed) setLight('Luz padrão');
         });
-        // O usuário já pediu a sessão no clique. NÃO aguardar download do GLB
-        // antes de instalar a câmera: isso causava o travamento em 'Abrindo câmera...'.
+        // Restaura o fluxo anterior à V9: preparar o GLB ANTES de conectar
+        // o renderer à sessão AR (mais leve que descarregar dentro da câmera).
+        say('Preparando o modelo 3D…');
+        model = await loadProduct(product);
+        if (destroyed) { disposeObject(model); return; }
+        pusher.add(createContactShadow(product.diameter), model);
+        modelReady = true;
+        say('Modelo preparado. Abrindo câmera…');
         session = await sessionP;
         if (destroyed) { await session.end().catch(() => {}); return; }
-        session.addEventListener('end', () => { if (!destroyed) closeRef.current(); }, { once: true });
+        session.addEventListener('end', () => { if (!destroyed) actions.current.exit?.(); }, { once: true });
         await renderer.xr.setSession(session);
         clearTimeout(startupNotice);
         viewerSpace = await session.requestReferenceSpace('viewer');
         await makeHitSource();
-        // Cards 3D pertencem à MESMA âncora do prato (nunca CSS sobre a câmera).
+        // O card gastronômico continua preso à âncora 3D do prato.
         dishCard = createDishSpatialCard(product);
         dishCard.mesh.position.set(Math.max(0.19, product.diameter * 0.60 + 0.12), 0.16, 0);
         pusher.add(dishCard.mesh);
-        if (restaurant?.instagram) {
-          socialCard = createInstagramSpatialCard(restaurant);
-          socialCard.mesh.position.set(dishCard.mesh.position.x + 0.27, 0.18, 0);
-          socialCard.mesh.visible = false;
-          pusher.add(socialCard.mesh);
-        }
-        say('Câmera aberta. Preparando o modelo 3D…');
-        loadProduct(product).then(loaded => {
-          if (destroyed) { disposeObject(loaded); return; }
-          model = loaded;
-          pusher.add(createContactShadow(product.diameter), model);
-          modelReady = true;
-          say('Aponte para uma mesa iluminada.');
-        }).catch(err => {
-          if (destroyed) return;
-          say('Falha ao carregar modelo 3D. Volte e tente novamente.');
-          onEvent('error', 'Falha ao carregar GLB no AR: ' + (err?.message || 'erro desconhecido'));
-        });
+        // Instagram AR intencionalmente desativado; módulo preservado.
+        say('Aponte para uma mesa iluminada.');
+        setTransition(null);
 
         controller = renderer.xr.getController(0);
         scene.add(controller);
@@ -277,9 +260,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
               xrCam.getWorldDirection(selectDirection);
             }
             selectRay.set(selectOrigin, selectDirection);
-            if (socialCard?.mesh.visible && selectRay.intersectObject(socialCard.mesh, false).length) {
-              setSocialConfirm(true);
-            } else if (dishCard && selectRay.intersectObject(dishCard.mesh, false).length) {
+            if (dishCard && selectRay.intersectObject(dishCard.mesh, false).length) {
               setAsk(true);
             }
             return;
@@ -297,8 +278,6 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
           xrCam.updateMatrixWorld(true);
           xrCam.getWorldPosition(selectOrigin);
           faceCardOnce(dishCard.mesh, selectOrigin, placement.matrix);
-          if (socialCard) faceCardOnce(socialCard.mesh, selectOrigin, placement.matrix);
-          nextSocial = performance.now() + 10000;
           if (typeof hit.createAnchor === 'function') {
             try {
               const created = await hit.createAnchor();
@@ -366,12 +345,6 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
                 const near = dist < ALERT_DIST;
                 if (near !== nearNow) { nearNow = near; setTooClose(near); }
                 const time = performance.now();
-                // Instagram aparece após alguns segundos e PERMANECE fixo no espaço.
-                // Nunca ocultar porque saiu do campo de visão, nunca posicionar na tela.
-                if (socialCard && !socialOn && time >= nextSocial) {
-                  socialOn = true;
-                  socialCard.mesh.visible = true;
-                }
                 if (near && !promptShown) {
                   const now = performance.now();
                   if (!dwellStart) dwellStart = now;
@@ -386,6 +359,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
         });
       } catch (err) {
         clearTimeout(startupNotice);
+        setTransition('error');
         say('Não foi possível abrir o AR: ' + (err.message || err) + '. Toque em Voltar para tentar novamente.');
         onEvent('error','Falha na realidade aumentada: '+(err?.message || 'Erro desconhecido')); 
       }
@@ -397,6 +371,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     return () => {
       destroyed = true;
       clearTimeout(startupNotice);
+      clearTimeout(exitTimer);
       overlay.removeEventListener('beforexrselect', beforeXRSelect);
       window.removeEventListener('resize', onResize);
       actions.current.recalc = null;
@@ -430,21 +405,19 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       {placed && <p className="hint">Prato e informações fixos no ambiente. Aponte para os cards e toque para interagir.</p>}
       <button className="ar-btn" onClick={() => actions.current.recalc?.()}>Recalcular superfície</button>
     </div>
-    {socialConfirm && <div className="ar-ask" role="dialog" aria-label="Abrir Instagram">
-      <p>Abrir o Instagram de {restaurant?.name || 'este estabelecimento'}?</p>
-      <button className="ar-btn" onClick={() => {
-        const handle = String(restaurant?.instagram || '').replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
-        if (handle) window.open(`https://www.instagram.com/${handle}/`, '_blank', 'noopener,noreferrer');
-        setSocialConfirm(false);
-      }}>Abrir Instagram ↗</button>
-      <button className="ar-ghost" onClick={() => setSocialConfirm(false)}>Continuar no AR</button>
-    </div>}
     {tooClose && !ask && <div className="ar-alert" role="alert">Muito perto. Afaste o celular do prato.</div>}
     {ask && <div className="ar-ask" role="dialog" aria-label="Adicionar ao carrinho">
       <p>{product.prompt}</p>
       <button className="ar-btn" onClick={() => { addRef.current?.(product.id); setAsk(false); setStatus('Adicionado ao carrinho ✓'); }}>Adicionar ao carrinho</button>
       <button className="ar-ghost" onClick={() => setAsk(false)}>Agora não</button>
     </div>}
+    <div className={`ar-transition ${transition ? 'is-visible' : ''}`} aria-hidden={!transition} aria-live="polite">
+      <div className="ar-transition-mark" aria-hidden="true"><span/><span/></div>
+      <p className="ar-transition-brand">MEZZIRA <span>AR</span></p>
+      <strong>{transition === 'closing' ? 'Voltando ao cardápio' : transition === 'error' ? 'Não foi possível iniciar o AR' : 'Preparando sua experiência'}</strong>
+      <small>{transition === 'closing' ? 'Encerrando visualização…' : transition === 'error' ? status : 'Carregando o modelo e preparando a câmera…'}</small>
+      {transition !== null && <button type="button" onClick={() => actions.current.exit?.()}>Voltar ao cardápio</button>}
+    </div>
   </>, overlay);
 }
 

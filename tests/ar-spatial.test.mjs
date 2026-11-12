@@ -8,23 +8,26 @@ test('o AR cria o card do produto como mesh na âncora do prato', () => {
   assert.match(viewer, /dishCard = createDishSpatialCard\(product\)/);
   assert.match(viewer, /pusher\.add\(dishCard\.mesh\)/);
 });
-test('o Instagram também pertence ao grupo espacial, sem CSS seguindo câmera', () => {
-  assert.match(viewer, /pusher\.add\(socialCard\.mesh\)/);
-  assert.doesNotMatch(viewer, /socialClip|socialWorld|socialRef\.current\.style\.left/);
-});
-test('o Instagram aparece após atraso e não some ao sair da tela', () => {
-  assert.match(viewer, /nextSocial = performance\.now\(\) \+ 10000/);
-  assert.match(viewer, /socialCard\.mesh\.visible = true/);
-  assert.doesNotMatch(viewer, /socialUntil|Math\.abs\(socialClip/);
+test('o Instagram fica inativo no AR, sem remover o módulo para versão futura', () => {
+  assert.doesNotMatch(viewer, /createInstagramSpatialCard|socialCard\.mesh|socialOn/);
+  assert.match(spatial, /createInstagramSpatialCard/);
 });
 test('categoria do produto substitui a etiqueta ilustrativa Veg', () => {
   assert.match(spatial, /const category = clean\(product\.cat\)/);
   assert.match(spatial, /ctx\.fillText\(category\.slice/);
   assert.doesNotMatch(spatial, /fillText\('Veg'/);
 });
-test('sessão AR é ativada antes de aguardar o GLB', () => {
-  assert.ok(viewer.indexOf('session = await sessionP') < viewer.indexOf('loadProduct(product).then', viewer.indexOf('session = await sessionP')));
+test('modelo GLB é preparado antes de conectar o XR à câmera', () => {
+  const loadAt = viewer.indexOf('model = await loadProduct(product)');
+  const xrAt = viewer.indexOf('session = await sessionP');
+  assert.ok(loadAt > 0 && loadAt < xrAt);
   assert.match(viewer, /if \(session\) session\.end/);
+});
+test('Voltar usa transição visual e deixa encerramento XR para limpeza', () => {
+  assert.match(viewer, /setTransition\('closing'\)/);
+  assert.match(viewer, /setTimeout\(\(\) => \{ if \(!destroyed\) closeRef\.current\(\); \}, 260\)/);
+  assert.doesNotMatch(viewer, /Promise\.race\(\[\s*session\.end/);
+  assert.match(css, /\.ar-transition\.is-visible/);
 });
 test('overlay AR ocupa tela inteira sem margens', () => {
   assert.match(css, /\.ar-screen\{position:fixed;inset:0/);

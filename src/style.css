@@ -143,3 +143,24 @@ svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .insta-glass h3{margin:14px 0 6px;font-size:18px;text-align:center}.insta-glass .insta-confirm-icon{font-size:28px;text-align:center;color:#d95138}
 .insta-glass>p{font-size:12px;text-align:center;line-height:1.45}
 @media(max-width:420px){.ar-social-position .insta-glass{width:222px;padding:12px}.insta-avatar{width:42px;height:42px;flex-basis:42px}}
+
+
+/* V10: transição visual de entrada/saída, sem interferir no ciclo de vida WebXR. */
+.ar-transition {
+  position:absolute;inset:0;z-index:300;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;padding:26px;
+  background:linear-gradient(155deg,#1e2a22 0%,#344b36 63%,#4f5f45 100%);
+  color:#f8f8f2;text-align:center;opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 260ms ease,visibility 260ms;
+}
+.ar-transition.is-visible {opacity:1;visibility:visible;pointer-events:auto}
+.ar-transition-brand {font-size:12px;letter-spacing:.28em;font-weight:800;margin:4px 0 20px}
+.ar-transition-brand span {color:#dce9b2}
+.ar-transition>strong {font-size:clamp(19px,5vw,27px);font-weight:800;letter-spacing:-.025em}
+.ar-transition>small {max-width:310px;font-size:13px;line-height:1.5;color:#eff5e6cf}
+.ar-transition>button {margin-top:18px;padding:11px 20px;border:1px solid #ffffff60;border-radius:99px;background:#ffffff12;color:#fff;font-weight:700;font-size:13px;font-family:inherit}
+.ar-transition-mark {position:relative;width:76px;height:76px;margin-bottom:6px}
+.ar-transition-mark span {position:absolute;inset:0;border:3px solid #cce6a339;border-top-color:#dce9b2;border-radius:50%;animation:mezzira-ar-spin 1.2s linear infinite}
+.ar-transition-mark span:last-child {inset:12px;border-width:2px;border-top-color:#fff;animation-direction:reverse;animation-duration:1.7s}
+@keyframes mezzira-ar-spin {to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.ar-transition,.ar-transition-mark span {animation:none!important;transition:none!important}}
