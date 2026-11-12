@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { XREstimatedLight } from 'three/addons/webxr/XREstimatedLight.js';
 import { loadProduct, createFallbackLights, createContactShadow, disposeObject } from './scene.js';
+import { createDishSpatialCard, createInstagramSpatialCard, faceCardOnce } from './ar-cards.js';
 import './style.css';
 
 const fmt = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -88,26 +89,6 @@ function Viewer({ product, onError }) {
   return <div className="viewer" ref={mount} aria-label={`Modelo 3D de ${product.name}`} />;
 }
 
-function InstagramCard({ restaurant, small = false }) {
-  const [confirm, setConfirm] = useState(false);
-  const handle = String(restaurant.instagram || '').replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
-  if (!handle) return null;
-  const url = `https://www.instagram.com/${handle}/`;
-  return <div className={`insta-glass ${small ? 'floating' : ''}`}>
-    {!confirm ? <>
-      <div className="insta-head"><strong>◎ Instagram</strong><b>@{handle}</b></div>
-      <div className="insta-profile"><div className="insta-avatar">{restaurant.logo ? <img src={restaurant.logo} alt="Logotipo do estabelecimento" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'inherit'}}/> : (restaurant.instagramName || restaurant.name || 'I').slice(0, 1).toUpperCase()}</div>
-      <div><strong>{restaurant.instagramName || restaurant.name}</strong><p>{restaurant.instagramBio || 'Acompanhe nossas novidades e bastidores.'}</p></div></div>
-      <div className="insta-link">instagram.com/{handle}</div>
-      <div className="insta-actions"><button onClick={() => setConfirm(true)}>Seguir</button><button onClick={() => setConfirm(true)}>Ver perfil</button></div>
-    </> : <>
-      <div className="insta-confirm-icon">↗</div><h3>Abrir o Instagram?</h3>
-      <p>Você poderá voltar ao cardápio depois.</p>
-      <div className="insta-actions"><button onClick={() => setConfirm(false)}>Voltar</button><button onClick={() => { window.open(url, '_blank', 'noopener,noreferrer'); setConfirm(false); }}>Continuar</button></div>
-    </>}
-  </div>;
-}
-
 // A sessão WebXR é pedida no clique (gesto do usuário). O overlay DOM é criado antes disso.
 function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restaurant, onEvent=()=>{} }) {
   const hostRef = useRef(null);
@@ -121,14 +102,31 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
   addRef.current = onAdd;
   const [tooClose, setTooClose] = useState(false);
   const [ask, setAsk] = useState(false);
-  const [socialShown, setSocialShown] = useState(false);
-  const socialRef = useRef(null);
+  const [socialConfirm, setSocialConfirm] = useState(false);
 
   useEffect(() => {
     let destroyed = false, session = null, renderer = null, xrLight = null, anchor = null;
     let hitTestSource = null, lowerHitTestSource = null, viewerSpace = null, hitCandidate = null, controller = null, onSelect = null, model = null;
+    let dishCard = null, socialCard = null, modelReady = false;
     let last = '';
     const say = (v) => { if (!destroyed && v !== last) { last = v; setStatus(v); } };
+    let closing = false;
+    // Desativa a sessão ANTES de desmontar o overlay para evitar câmera presa.
+    actions.current.exit = async () => {
+      if (closing) return;
+      closing = true;
+      say('Fechando câmera…');
+      if (session) {
+        let timeoutId;
+        try {
+          await Promise.race([
+            session.end().catch(() => {}),
+            new Promise(resolve => { timeoutId = setTimeout(resolve, 1800); })
+          ]);
+        } finally { clearTimeout(timeoutId); }
+      }
+      if (!destroyed) closeRef.current();
+    };
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
     const placement = new THREE.Group();
@@ -155,10 +153,11 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     let stableFrames = 0, hasSmoothed = false, lastSurfaceAt = 0;
     const MIN_HITS = 2; // Dispensa os seis quadros exigidos na versão anterior.
     const MIN_UP_DOT = 0.82; // Mesa quase horizontal, com pequena tolerância à inclinação.
-    let nextSocial = 0, socialUntil = 0, socialOn = false, socialVariant = 0;
+    let nextSocial = 0, socialOn = false;
     const smoothPos = new THREE.Vector3(), observedPos = new THREE.Vector3();
     const smoothQuat = new THREE.Quaternion(), observedQuat = new THREE.Quaternion();
-    const socialWorld = new THREE.Vector3(), socialClip = new THREE.Vector3();
+    const selectRay = new THREE.Raycaster();
+    const selectOrigin = new THREE.Vector3(), selectDirection = new THREE.Vector3();
     const one = new THREE.Vector3(1, 1, 1);
 
     const makeHitSource = async () => {
@@ -187,10 +186,18 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       reticle.visible = false;
       setPlaced(false);
       pusher.position.set(0, 0, 0);
-      dwellStart = 0; stableFrames = 0; hasSmoothed = false; lastSurfaceAt = 0; socialOn = false; setSocialShown(false);
+      dwellStart = 0; stableFrames = 0; hasSmoothed = false; lastSurfaceAt = 0; socialOn = false; if (socialCard) socialCard.mesh.visible = false; setSocialConfirm(false);
       try { await makeHitSource(); } catch { /* o loop continua tentando */ }
       say('Superfície recalculada. Aponte para a mesa.');
     };
+
+    const startupNotice = setTimeout(() => {
+      say('A câmera está demorando a abrir. Você pode tocar em Voltar e tentar novamente.');
+    }, 12000);
+    const beforeXRSelect = event => {
+      if (event.target?.closest?.('button,a,input')) event.preventDefault();
+    };
+    overlay.addEventListener('beforexrselect', beforeXRSelect);
 
     const init = async () => {
       try {
@@ -216,28 +223,82 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
           fallback.visible = true;
           if (!destroyed) setLight('Luz padrão');
         });
-        model = await loadProduct(product);
-        if (destroyed) { disposeObject(model); return; }
-        pusher.add(createContactShadow(product.diameter), model);
-
+        // O usuário já pediu a sessão no clique. NÃO aguardar download do GLB
+        // antes de instalar a câmera: isso causava o travamento em 'Abrindo câmera...'.
         session = await sessionP;
         if (destroyed) { await session.end().catch(() => {}); return; }
         session.addEventListener('end', () => { if (!destroyed) closeRef.current(); }, { once: true });
         await renderer.xr.setSession(session);
+        clearTimeout(startupNotice);
         viewerSpace = await session.requestReferenceSpace('viewer');
         await makeHitSource();
+        // Cards 3D pertencem à MESMA âncora do prato (nunca CSS sobre a câmera).
+        dishCard = createDishSpatialCard(product);
+        dishCard.mesh.position.set(Math.max(0.19, product.diameter * 0.60 + 0.12), 0.16, 0);
+        pusher.add(dishCard.mesh);
+        if (restaurant?.instagram) {
+          socialCard = createInstagramSpatialCard(restaurant);
+          socialCard.mesh.position.set(dishCard.mesh.position.x + 0.27, 0.18, 0);
+          socialCard.mesh.visible = false;
+          pusher.add(socialCard.mesh);
+        }
+        say('Câmera aberta. Preparando o modelo 3D…');
+        loadProduct(product).then(loaded => {
+          if (destroyed) { disposeObject(loaded); return; }
+          model = loaded;
+          pusher.add(createContactShadow(product.diameter), model);
+          modelReady = true;
+          say('Aponte para uma mesa iluminada.');
+        }).catch(err => {
+          if (destroyed) return;
+          say('Falha ao carregar modelo 3D. Volte e tente novamente.');
+          onEvent('error', 'Falha ao carregar GLB no AR: ' + (err?.message || 'erro desconhecido'));
+        });
 
         controller = renderer.xr.getController(0);
         scene.add(controller);
-        onSelect = async () => {
-          if (placement.visible || !reticle.visible || !hitCandidate || stableFrames < MIN_HITS) return;
+        onSelect = async (event) => {
+          if (placement.visible) {
+            // Preferir o raio real do toque XR; câmera central só como fallback.
+            const ref = renderer.xr.getReferenceSpace();
+            const touchPose = ref && event?.frame && event?.inputSource?.targetRaySpace
+              ? event.frame.getPose(event.inputSource.targetRaySpace, ref)
+              : null;
+            if (touchPose) {
+              const t = touchPose.transform;
+              selectOrigin.set(t.position.x, t.position.y, t.position.z);
+              selectDirection.set(0, 0, -1).applyQuaternion(new THREE.Quaternion(
+                t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w
+              ));
+            } else {
+              const xrCam = renderer.xr.getCamera(camera);
+              xrCam.updateMatrixWorld(true);
+              xrCam.getWorldPosition(selectOrigin);
+              xrCam.getWorldDirection(selectDirection);
+            }
+            selectRay.set(selectOrigin, selectDirection);
+            if (socialCard?.mesh.visible && selectRay.intersectObject(socialCard.mesh, false).length) {
+              setSocialConfirm(true);
+            } else if (dishCard && selectRay.intersectObject(dishCard.mesh, false).length) {
+              setAsk(true);
+            }
+            return;
+          }
+          if (!modelReady) { say('Carregando o prato 3D. Tente novamente em instantes.'); return; }
+          if (!reticle.visible || !hitCandidate || stableFrames < MIN_HITS) return;
           const hit = hitCandidate;
           placement.matrix.copy(reticle.matrix);
           placement.visible = true;
           reticle.visible = false;
           setPlaced(true);
           say('Prato fixado na superfície. Caminhe ao redor para observar.');
-          nextSocial = performance.now() + 11500;
+          // Orientação é congelada uma única vez, no instante em que a âncora nasce.
+          const xrCam = renderer.xr.getCamera(camera);
+          xrCam.updateMatrixWorld(true);
+          xrCam.getWorldPosition(selectOrigin);
+          faceCardOnce(dishCard.mesh, selectOrigin, placement.matrix);
+          if (socialCard) faceCardOnce(socialCard.mesh, selectOrigin, placement.matrix);
+          nextSocial = performance.now() + 10000;
           if (typeof hit.createAnchor === 'function') {
             try {
               const created = await hit.createAnchor();
@@ -290,7 +351,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
                   break;
                 }
                 if (!hitCandidate) { stableFrames = 0; hasSmoothed = false; }
-                say(reticle.visible ? 'Mesa detectada ✓ Toque na tela para fixar o prato.' : hitCandidate ? 'Mesa encontrada! Segure por um instante…' : lastSurfaceAt && performance.now()-lastSurfaceAt<3500 ? 'Perdemos a mesa de vista. Aponte novamente.' : 'Aponte para uma mesa iluminada e mova o celular lentamente em um pequeno arco.');
+                if (modelReady) say(reticle.visible ? 'Mesa detectada ✓ Toque na tela para fixar o prato.' : hitCandidate ? 'Mesa encontrada! Segure por um instante…' : lastSurfaceAt && performance.now()-lastSurfaceAt<3500 ? 'Perdemos a mesa de vista. Aponte novamente.' : 'Aponte para uma mesa iluminada e mova o celular lentamente em um pequeno arco.');
               }
             }
             if (placement.visible && ref) {
@@ -305,26 +366,11 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
                 const near = dist < ALERT_DIST;
                 if (near !== nearNow) { nearNow = near; setTooClose(near); }
                 const time = performance.now();
-                if (restaurant?.instagram && !near && !promptShown && time > nextSocial && !socialOn) {
+                // Instagram aparece após alguns segundos e PERMANECE fixo no espaço.
+                // Nunca ocultar porque saiu do campo de visão, nunca posicionar na tela.
+                if (socialCard && !socialOn && time >= nextSocial) {
                   socialOn = true;
-                  socialVariant++;
-                  socialUntil = time + 8000;
-                  setSocialShown(true);
-                }
-                if (socialOn && (time > socialUntil || near)) {
-                  socialOn = false;
-                  nextSocial = time + 28000 + Math.random() * 18000;
-                  setSocialShown(false);
-                }
-                if (socialOn && socialRef.current) {
-                  const xrCam = renderer.xr.getCamera(camera);
-                  const renderCam = xrCam.cameras?.[0] || xrCam;
-                  socialWorld.set(socialVariant % 2 ? product.diameter * 0.90 : 0, product.diameter * (socialVariant % 2 ? 0.85 : 1.35), 0).applyMatrix4(placement.matrix);
-                  socialClip.copy(socialWorld).project(renderCam);
-                  const show = socialClip.z > -1 && socialClip.z < 1 && Math.abs(socialClip.x) < 0.94 && Math.abs(socialClip.y) < 0.86;
-                  socialRef.current.style.opacity = show ? '1' : '0';
-                  socialRef.current.style.left = `${Math.max(135, Math.min(window.innerWidth - 135, (socialClip.x + 1) * window.innerWidth / 2))}px`;
-                  socialRef.current.style.top = `${Math.max(100, Math.min(window.innerHeight - 180, (1 - socialClip.y) * window.innerHeight / 2))}px`;
+                  socialCard.mesh.visible = true;
                 }
                 if (near && !promptShown) {
                   const now = performance.now();
@@ -339,7 +385,8 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
           renderer.render(scene, camera);
         });
       } catch (err) {
-        say('Não foi possível abrir a AR: ' + (err.message || err));
+        clearTimeout(startupNotice);
+        say('Não foi possível abrir o AR: ' + (err.message || err) + '. Toque em Voltar para tentar novamente.');
         onEvent('error','Falha na realidade aumentada: '+(err?.message || 'Erro desconhecido')); 
       }
     };
@@ -349,17 +396,22 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     window.addEventListener('resize', onResize);
     return () => {
       destroyed = true;
+      clearTimeout(startupNotice);
+      overlay.removeEventListener('beforexrselect', beforeXRSelect);
       window.removeEventListener('resize', onResize);
       actions.current.recalc = null;
+      actions.current.exit = null;
       renderer?.setAnimationLoop(null);
       if (controller && onSelect) controller.removeEventListener('select', onSelect);
       hitTestSource?.cancel?.();
       lowerHitTestSource?.cancel?.();
       anchor?.delete?.();
-      session?.end?.().catch(() => {});
+      if (session) session.end?.().catch(() => {});
+      else Promise.resolve(sessionP).then(late => late?.end?.().catch(() => {})).catch(() => {});
       xrLight?.dispose?.();
       scene.environment = null;
-      disposeObject(model);
+      dishCard?.dispose?.();
+      disposeObject(pusher); // modelos e texturas dos cards
       disposeObject(reticle);
       renderer?.dispose();
       renderer?.domElement.remove();
@@ -369,16 +421,24 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
   return createPortal(<>
     <div className="ar-canvas" ref={hostRef} />
     <div className="ar-top">
-      <button className="ghost" onClick={onClose} aria-label="Fechar AR">Voltar</button>
+      <button className="ghost" onClick={() => actions.current.exit?.()} aria-label="Fechar AR">Voltar</button>
       <div><strong>{product.name}</strong><span>{light}</span></div>
     </div>
     <div className="ar-bottom">
       <p aria-live="polite">{status}</p>
       {!placed&&<p className="hint">Dica: uma mesa com textura e boa iluminação é detectada mais facilmente. Evite balançar o celular.</p>}
-      {placed && <p className="hint">Prato fixado. Circule ao redor para ver de todos os lados.</p>}
+      {placed && <p className="hint">Prato e informações fixos no ambiente. Aponte para os cards e toque para interagir.</p>}
       <button className="ar-btn" onClick={() => actions.current.recalc?.()}>Recalcular superfície</button>
     </div>
-    {Boolean(restaurant?.instagram) && <div ref={socialRef} className="ar-social-position" style={{display: socialShown && !ask ? 'block' : 'none'}}><InstagramCard restaurant={restaurant} small /></div>}
+    {socialConfirm && <div className="ar-ask" role="dialog" aria-label="Abrir Instagram">
+      <p>Abrir o Instagram de {restaurant?.name || 'este estabelecimento'}?</p>
+      <button className="ar-btn" onClick={() => {
+        const handle = String(restaurant?.instagram || '').replace(/^@/, '').replace(/[^a-zA-Z0-9._]/g, '');
+        if (handle) window.open(`https://www.instagram.com/${handle}/`, '_blank', 'noopener,noreferrer');
+        setSocialConfirm(false);
+      }}>Abrir Instagram ↗</button>
+      <button className="ar-ghost" onClick={() => setSocialConfirm(false)}>Continuar no AR</button>
+    </div>}
     {tooClose && !ask && <div className="ar-alert" role="alert">Muito perto. Afaste o celular do prato.</div>}
     {ask && <div className="ar-ask" role="dialog" aria-label="Adicionar ao carrinho">
       <p>{product.prompt}</p>

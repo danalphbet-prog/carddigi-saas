@@ -28,7 +28,7 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
   if(!chosen?.url)return;
   const overlay=document.createElement('div');overlay.className='ar-screen';document.body.appendChild(overlay);
   const sessionP=window.isSecureContext&&navigator.xr?navigator.xr.requestSession('immersive-ar',{requiredFeatures:['hit-test'],optionalFeatures:['local-floor','anchors','light-estimation','dom-overlay'],domOverlay:{root:overlay}}):Promise.reject(Error('Seu navegador ou aparelho não oferece suporte à realidade aumentada.'));
-  sessionP.catch(()=>{});onEvent('ar_open');setAr({product:chosen,overlay,sessionP});
+  sessionP.catch(()=>{});onEvent('ar_open');setAr({product:chosen,overlay,sessionP,restaurant:{...restaurant},economy});
  };
  const checkout=()=>{
   const phone=tel(restaurant.whatsapp);
@@ -73,6 +73,6 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
   {cartOpen&&<div className="sm-cart-overlay" onClick={()=>setCartOpen(false)}><div className="sm-cart-drawer" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Carrinho"><div className="sm-cart-head"><div><small>SEU PEDIDO</small><h2>Carrinho</h2></div><button onClick={()=>setCartOpen(false)} aria-label="Fechar carrinho"><X/></button></div>{numItems?available.filter(p=>cart[p.id]).map(p=><div className="sm-cart-row" key={p.id}><Image src={p.photo} alt={p.name}/><div><b>{p.name}</b><small>{money(p.price)} cada</small><div><button onClick={()=>change(p.id,cart[p.id]-1)}><Minus size={16}/></button><strong>{cart[p.id]}</strong><button onClick={()=>change(p.id,cart[p.id]+1)}><Plus size={16}/></button></div></div><strong>{money(p.price*cart[p.id])}</strong></div>):<p className="sm-empty">Seu carrinho está vazio.</p>}
    <div className="sm-cart-total"><span>Total</span><strong>{money(total)}</strong></div><label>Seu nome (opcional)<input maxLength={70} value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Como podemos chamar você?"/></label><label>Observações (opcional)<textarea maxLength={300} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Ex.: sem cebola, retirar no local..."/></label>{msg&&<p className="sm-error">{msg}</p>}<button disabled={!numItems} className="sm-checkout" onClick={checkout}><MessageCircle size={19}/> Fazer pedido no WhatsApp <ArrowRight size={18}/></button><p className="sm-cart-note">A mensagem será aberta no WhatsApp. O envio, o pagamento e a confirmação do pedido acontecem com o restaurante.</p>
   </div></div>}
-  {ar&&<ARSession product={ar.product} overlay={ar.overlay} sessionP={ar.sessionP} onClose={closeAr} economy={economy} onAdd={id=>change(id,(cart[id]||0)+1)} restaurant={restaurant} onEvent={onEvent}/>}
+  {ar&&<ARSession product={ar.product} overlay={ar.overlay} sessionP={ar.sessionP} onClose={closeAr} economy={ar.economy} onAdd={id=>change(id,(cart[id]||0)+1)} restaurant={ar.restaurant} onEvent={onEvent}/>}
  </div>
 }
