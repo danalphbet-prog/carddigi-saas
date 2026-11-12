@@ -154,3 +154,13 @@
 .cover-drag-preview{height:205px;border-radius:14px;background-color:#c7ccbd;background-size:cover;background-repeat:no-repeat;display:grid;place-items:center;color:#fff;font-weight:700;text-shadow:0 2px 8px #000c;cursor:grab;touch-action:none;user-select:none}
 .cover-drag-preview:active{cursor:grabbing}.cover-ranges{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.cover-ranges input{width:100%}
 @media(max-width:600px){.cover-ranges{grid-template-columns:1fr}}
+
+/* V12 — estoque ilimitado e alinhamento da capa por preset */
+.stock-editor-field{display:flex;flex-direction:column;gap:9px;min-width:0}
+.stock-editor-field label{display:flex;flex-direction:column;gap:5px}
+.stock-editor-field select,.stock-editor-field input{min-width:0;width:100%}
+.cover-position-presets{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0}
+.cover-position-presets button{background:#f4f6ef;border:1px solid #dce5d5;border-radius:999px;color:#435841;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.cover-position-presets button[aria-pressed="true"]{background:#405d39;border-color:#405d39;color:#fff}
+.cover-drag-preview{background-size:cover!important;background-repeat:no-repeat!important;touch-action:none;cursor:grab}
+.cover-drag-preview:active{cursor:grabbing}

@@ -16,3 +16,33 @@
 .ss-promo-editor input,.ss-promo-editor textarea,.ss-integrations input{width:100%;background:#fff;color:#233428;border:1px solid #d7e3d2;border-radius:10px;padding:10px;font:inherit}
 .ss-promo-editor textarea{resize:vertical}.ss-checkbox{display:flex;align-items:center;gap:10px;padding:13px 0;font-size:14px}.ss-checkbox input{width:18px;height:18px;accent-color:#3e6340}
 .ss-integrations label{display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:700;margin:19px 0}.ss-integration-warning{border-radius:12px;background:#f4f4e8;border:1px solid #e4e5cf;padding:14px;font-size:12px;line-height:1.6;margin:15px 0}
+
+/* V11 — grupos tipográficos; 60 posições reservadas para layouts futuros. */
+.savor-studio .ss-v11-font-groups {display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0 22px}
+.savor-studio .ss-v11-font-groups button {display:flex;flex-direction:column;gap:6px;min-height:127px;background:#fff;border:1px solid #dce3d8;border-radius:16px;padding:15px;text-align:left;color:#28352b;transition:box-shadow .2s,border-color .2s,transform .2s}
+.savor-studio .ss-v11-font-groups button.selected {border:2px solid #66844d;background:#f3f8eb;box-shadow:0 0 0 2px rgba(102,132,77,.1)}
+.savor-studio .ss-v11-font-groups button:active {transform:scale(.98)}
+.savor-studio .ss-v11-group-heading {font-size:23px;font-weight:700;line-height:1.06}
+.savor-studio .ss-v11-group-example {font-size:12px;color:#52614e;line-height:1.35}
+.savor-studio .ss-v11-font-groups small {font-size:10px;color:#81917a}
+.savor-studio .ss-v11-template-notice {padding:16px;margin:15px 0 23px;background:#f4f6f0;border:1px solid #e1e7da;border-radius:16px}
+.savor-studio .ss-v11-template-notice strong {display:block;font-size:14px}
+.savor-studio .ss-v11-template-notice p {font-size:12px;color:#657363;line-height:1.55}
+.savor-studio .ss-v11-template-notice>div {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.savor-studio .ss-v11-template-notice>div span {padding:7px 10px;border-radius:999px;background:#e5ecda;font-size:11px;font-weight:700;color:#40563b}
+.savor-studio .ss-v11-template-notice small {display:block;color:#7b8577;line-height:1.45}
+
+/* V12 — configuração unificada da loja */
+.savor-studio .ss-shop{display:flex;flex-direction:column;gap:20px}
+.savor-studio .ss-shop-intro{padding:4px 2px}
+.savor-studio .ss-shop-intro h2{font-size:19px;margin:0 0 6px}
+.savor-studio .ss-shop-intro p{font-size:13px;color:#73836e;margin:0}
+.savor-studio .ss-shop-section{min-width:0}
+.savor-studio .ss-shop-section>h2{font-size:16px;margin:0 0 13px}
+.savor-studio .ss-stock-row .ss-stock-mode{display:flex;flex-direction:column;gap:4px;min-width:130px;flex:1;font-size:11px;font-weight:700;color:#60745c}
+.savor-studio .ss-stock-row .ss-stock-mode :is(select,input){width:100%;min-height:39px;padding:8px 10px;border:1px solid #cedacb;border-radius:9px;background:#fff;color:#283b2d;font-size:12px}
+.savor-studio .ss-theme-swatch{border:1px solid;gap:7px;padding:8px}
+.savor-studio .ss-theme-swatch .ss-theme-swatch-icon{display:grid;place-items:center;width:30px;height:30px;font-size:20px;font-style:normal;border-radius:50%;flex-shrink:0}
+.savor-studio .ss-theme-swatch>span{padding:8px 10px;border:1px solid;border-radius:8px;font-weight:800}
+.savor-studio .ss-theme-swatch>em{padding:7px;border-radius:8px;font-size:10px;font-weight:800;font-style:normal}
+@media(max-width:740px){.savor-studio .ss-shop{gap:14px}.savor-studio .ss-stock-row .ss-stock-mode{min-width:100%;}}

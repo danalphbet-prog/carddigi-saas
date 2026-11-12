@@ -39,54 +39,95 @@ function Photo({ p, className }) {
 
 function Viewer({ product, onError }) {
   const mount = useRef(null);
+  const statusRef = useRef(null);
+  const errorRef = useRef(onError);
+  errorRef.current = onError;
   useEffect(() => {
     const host = mount.current;
+    if (!host || !product?.url) return;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 30);
     camera.position.set(0.43, 0.32, 0.45);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
-    configureRenderer(renderer);
-    host.appendChild(renderer.domElement);
-    createFallbackLights(scene);
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 0.055, 0);
-    controls.enableDamping = true;
-    controls.minDistance = 0.15;
-    controls.maxDistance = 1.2;
-    controls.maxPolarAngle = Math.PI * 0.82;
-    controls.update();
-
-    let removed = false;
-    let object = null;
-    loadProduct(product).then((model) => {
-      if (removed) { disposeObject(model); return; }
-      object = model;
+    let renderer, controls, observer, visibilityObserver, id;
+    let object = null, removed = false, inViewport = true, lastFrame = 0;
+    const message = (v,ready=false) => {
+      if (!removed && statusRef.current) {
+        statusRef.current.textContent = v;
+        statusRef.current.dataset.ready = String(ready);
+      }
+    };
+    try {
+      // Menos exigência de GPU: a prévia não precisa de 60 FPS nem de MSAA.
+      renderer = new THREE.WebGLRenderer({antialias:false,alpha:true,powerPreference:'low-power'});
+      configureRenderer(renderer);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.15));
+      host.appendChild(renderer.domElement);
+      createFallbackLights(scene);
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0,0.055,0);
+      controls.enableDamping=true;
+      controls.minDistance=0.15;
+      controls.maxDistance=1.2;
+      controls.maxPolarAngle=Math.PI*0.82;
+      controls.update();
+    } catch (e) {
+      renderer?.dispose?.();
+      message('Não foi possível iniciar a prévia 3D.');
+      errorRef.current?.('Prévia 3D indisponível neste dispositivo.');
+      return;
+    }
+    // Progresso honesto: só mostramos percentual quando o servidor informa tamanho.
+    loadProduct(product,event=>{
+      if (removed) return;
+      if (event?.total > 0) message(`Carregando modelo 3D… ${Math.min(100,Math.round(100*event.loaded/event.total))}%`);
+      else message('Carregando modelo 3D…');
+    }).then(model=>{
+      if (removed) {disposeObject(model);return;}
+      object=model;
       scene.add(model);
-    }).catch(() => { if (!removed) onError('Não foi possível carregar a visualização 3D.'); });
-
-    const resize = () => {
-      if (!host.clientWidth || !host.clientHeight) return;
-      camera.aspect = host.clientWidth / host.clientHeight;
+      message('Pronto',true);
+    }).catch(err=>{
+      if (removed) return;
+      message('Não foi possível carregar o GLB.');
+      errorRef.current?.(`Não foi possível carregar a prévia 3D: ${err?.message||'falha no modelo'}`);
+    });
+    const resize=()=>{
+      if (!host.clientWidth||!host.clientHeight)return;
+      camera.aspect=host.clientWidth/host.clientHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(host.clientWidth, host.clientHeight);
+      renderer.setSize(host.clientWidth,host.clientHeight);
     };
-    const observer = new ResizeObserver(resize);
-    observer.observe(host);
+    if (typeof ResizeObserver!=='undefined') {
+      observer=new ResizeObserver(resize);
+      observer.observe(host);
+    }
+    if (typeof IntersectionObserver!=='undefined') {
+      visibilityObserver=new IntersectionObserver(entries=>{inViewport=entries[0]?.isIntersecting??true},{threshold:0});
+      visibilityObserver.observe(host);
+    }
     resize();
-    let id;
-    const animate = () => { id = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
-    animate();
-    return () => {
-      removed = true;
-      cancelAnimationFrame(id);
-      observer.disconnect();
-      controls.dispose();
-      disposeObject(object);
-      renderer.dispose();
-      renderer.domElement.remove();
+    const animate=t=>{
+      if (removed)return;
+      id=requestAnimationFrame(animate);
+      if (!inViewport||document.hidden||t-lastFrame<32)return;
+      lastFrame=t;
+      controls.update();
+      renderer.render(scene,camera);
     };
-  }, [product, onError]);
-  return <div className="viewer" ref={mount} aria-label={`Modelo 3D de ${product.name}`} />;
+    id=requestAnimationFrame(animate);
+    return ()=>{
+      removed=true;
+      cancelAnimationFrame(id);
+      observer?.disconnect();
+      visibilityObserver?.disconnect();
+      controls?.dispose();
+      disposeObject(object);
+      renderer?.dispose();
+      renderer?.domElement?.remove();
+    };
+  // Não recriar WebGL porque o pai recebeu uma nova callback de erro.
+  },[product?.url,product?.diameter,product?.roughness]);
+  return <div className="viewer-shell"><div className="viewer" ref={mount} aria-label={`Modelo 3D de ${product.name}`}/><div className="viewer-status" ref={statusRef} role="status" data-ready="false">Preparando visualização 3D…</div></div>;
 }
 
 // A sessão WebXR é pedida no clique (gesto do usuário). O overlay DOM é criado antes disso.
@@ -145,7 +186,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     let dwellStart = 0, promptShown = false, nearNow = false;
     let stableFrames = 0, hasSmoothed = false, lastSurfaceAt = 0;
     const MIN_HITS = 2; // Dispensa os seis quadros exigidos na versão anterior.
-    const MIN_UP_DOT = 0.82; // Mesa quase horizontal, com pequena tolerância à inclinação.
+    const MIN_UP_DOT = 0.82; // Mantém segurança horizontal; priorizamos a superfície estável entre dois raios.
     const smoothPos = new THREE.Vector3(), observedPos = new THREE.Vector3();
     const smoothQuat = new THREE.Quaternion(), observedQuat = new THREE.Quaternion();
     const selectRay = new THREE.Raycaster();
@@ -302,13 +343,22 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
                 reticle.visible = false;
                 hitCandidate = null;
                 const hits = [...frame.getHitTestResults(hitTestSource), ...(lowerHitTestSource ? frame.getHitTestResults(lowerHitTestSource) : [])];
-                for (const hit of hits) {
-                  const pose = hit.getPose(ref);
-                  if (!pose) continue;
-                  hitMatrix.fromArray(pose.transform.matrix);
+                // Se dois raios encontram uma mesa, prioriza a posição próxima
+                // à mesa acompanhada nos quadros anteriores (evita saltos).
+                const candidates = hits.map(hit => ({hit,pose:hit.getPose(ref)})).filter(x=>x.pose).filter(x=>{
+                  hitMatrix.fromArray(x.pose.transform.matrix);
                   surfaceRotation.setFromRotationMatrix(hitMatrix);
-                  surfaceUp.set(0, 1, 0).applyQuaternion(surfaceRotation);
-                  if (surfaceUp.y < MIN_UP_DOT) continue;
+                  return surfaceUp.set(0,1,0).applyQuaternion(surfaceRotation).y>=MIN_UP_DOT;
+                });
+                if (hasSmoothed) {
+                  const distanceToPrevious = ({pose}) => {
+                    const pos = pose.transform.position;
+                    return (pos.x-smoothPos.x)**2+(pos.y-smoothPos.y)**2+(pos.z-smoothPos.z)**2;
+                  };
+                  candidates.sort((a,b)=>distanceToPrevious(a)-distanceToPrevious(b));
+                }
+                for (const {hit,pose} of candidates) {
+                  hitMatrix.fromArray(pose.transform.matrix);
                   observedPos.setFromMatrixPosition(hitMatrix);
                   observedQuat.setFromRotationMatrix(hitMatrix);
                   if (!hasSmoothed || smoothPos.distanceTo(observedPos) > 0.14) {

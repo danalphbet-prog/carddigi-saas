@@ -3,7 +3,8 @@ import {createPortal} from 'react-dom';
 import {ArrowLeft,ArrowRight,ShoppingBag,Plus,Minus, X, Search, MapPin, Instagram, MessageCircle, Box, ScanLine, Camera, ChevronRight, Heart, UtensilsCrossed, SlidersHorizontal, Check, Globe} from 'lucide-react';
 import {Viewer, ARSession} from './ar-viewer.jsx';
 import './savor-menu.css';
-import {paletteById,fontById,clampCover,checkoutIntro,getPromotions} from './menu-design.js';
+import {paletteById,fontById,fontGroupById,clampCover,checkoutIntro,getPromotions} from './menu-design.js';
+import {resolveTemplates} from './template-system.js';
 
 const money=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const tel=v=>String(v||'').replace(/\D/g,'');
@@ -41,9 +42,14 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
  };
  const palette=paletteById(restaurant.menuPalette);
  const font=fontById(restaurant.menuFont);
- const design={'--sm-olive':palette.accent,'--sm-cream':palette.cream,'--sm-cream2':palette.cream2,'--sm-ink':palette.ink,'--sm-muted':palette.muted,'--sm-font':font.css,'--sm-heading-font':font.css};
- return <div className="savor-client" data-preset={restaurant.menuPalette?'classico':(restaurant.themePreset||'classico')} style={design}>
-  <div className="sm-home-hero" style={restaurant.cover?{backgroundImage:`linear-gradient(180deg,rgba(21,20,13,.12),rgba(21,20,13,.82)),url(${restaurant.cover})`,backgroundPosition:`${clampCover(restaurant.coverX)}% ${clampCover(restaurant.coverY)}%`}:undefined}>
+ const group=fontGroupById(restaurant.menuFontGroup);
+ const templates=resolveTemplates(restaurant);
+ const design={'--sm-olive':palette.accent,'--sm-cream':palette.cream,'--sm-cream2':palette.cream2,'--sm-ink':palette.ink,'--sm-muted':palette.muted,'--sm-font':group?.body||font.css,'--sm-heading-font':group?.heading||font.css,'--sm-accent-font':group?.accent||font.css,'--sm-description-style':group?.descriptionItalic?'italic':'normal','--sm-surface':palette.surface,'--sm-border':palette.border,'--sm-accent-soft':palette.accentSoft,'--sm-on-accent':palette.onAccent,'--sm-hero-base':palette.heroBase,'--sm-on-surface':palette.ink};
+ const displayRows=templates.categoriesSeparated
+   ? [...new Set(filtered.map(p=>p.cat||'Outros'))].flatMap(category=>[{type:'category',category},...filtered.filter(p=>(p.cat||'Outros')===category).map(product=>({type:'product',product}))])
+   : filtered.map(product=>({type:'product',product}));
+ return <div className="savor-client" data-preset={restaurant.menuPalette?'classico':(restaurant.themePreset||'classico')} data-menu-template={templates.menu} data-detail-template={templates.detail} style={design}>
+  <div className="sm-home-hero" style={{backgroundColor:palette.heroBase}}>{restaurant.cover&&<img className="sm-hero-image" src={restaurant.cover} alt="" aria-hidden="true" style={{objectPosition:`${clampCover(restaurant.coverX)}% ${clampCover(restaurant.coverY)}%`}}/>}
    <div className="sm-home-top"><div className="sm-wordmark"><span className="sm-logomark">{restaurant.logo?<img src={restaurant.logo} alt=""/>:<UtensilsCrossed size={20}/>}</span><span>{restaurant.name}</span></div><div className="sm-top-btns"><button onClick={()=>setCartOpen(true)} title="Abrir carrinho" aria-label="Carrinho"><ShoppingBag size={21}/>{numItems>0&&<i>{numItems}</i>}</button></div></div>
    {promos.length>0&&<div className="sm-promo" key={promoIndex} aria-live="off"><small>PROMOÇÃO ESPECIAL</small><strong>{promos[promoIndex]?.title}</strong><p>{promos[promoIndex]?.detail}</p>{promos.length>1&&<div className="sm-promo-pips">{promos.map((_,i)=><i key={i} className={i===promoIndex?'on':''}/>)}</div>}</div>}
    <div className="sm-hero-copy"><span className="sm-eyebrow">CARDÁPIO DIGITAL · EXPERIÊNCIA IMERSIVA</span><h1>{restaurant.name}</h1><p>{restaurant.tagline||restaurant.niche||'Conheça nosso cardápio.'}</p><button onClick={()=>document.getElementById('sm-menu-list')?.scrollIntoView({behavior:'smooth'})}>Explorar o cardápio <span><ArrowRight size={18}/></span></button></div>
@@ -59,7 +65,7 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
     <div className="sm-section-header" id="sm-products"><div><small>ESCOLHA SEUS FAVORITOS</small><h2>Nosso cardápio</h2></div><span>{available.length} {available.length===1?'item':'itens'}</span></div>
     <div className="sm-search"><Search size={18}/><input value={search} placeholder="Pesquisar no cardápio..." onChange={e=>setSearch(e.target.value)} aria-label="Pesquisar produtos"/><SlidersHorizontal size={17}/></div>
     <div className="sm-categories" role="group" aria-label="Categorias">{['Todos',...new Set(available.map(p=>p.cat||'Outros'))].map(c=><button className={cat===c?'on':''} onClick={()=>setCat(c)} key={c}>{c}</button>)}</div>
-    <div className="sm-product-grid">{filtered.map(p=><article key={p.id} className="sm-product-card"><button className="sm-card-pic" onClick={()=>openProduct(p)} aria-label={`Ver ${p.name}`}><Image src={p.photo} alt={p.name}/>{p.url&&<span className="sm-card-ar"><Box size={14}/> 3D</span>}</button><div className="sm-card-info"><button onClick={()=>openProduct(p)}><strong>{p.name}</strong><span>{p.description||p.cat||''}</span><b>{money(p.price)}</b></button><button className="sm-add" onClick={()=>change(p.id,(cart[p.id]||0)+1)} aria-label={`Adicionar ${p.name}`}><Plus size={18}/></button></div></article>)}{!filtered.length&&<div className="sm-empty">Nenhum produto encontrado. Tente outra categoria ou pesquisa.</div>}</div>
+    <div className="sm-product-grid">{displayRows.map(row=>row.type==='category'?<h3 key={'category-'+row.category} className="sm-category-heading">{row.category}</h3>:<article key={row.product.id} className="sm-product-card"><button className="sm-card-pic" onClick={()=>openProduct(row.product)} aria-label={`Ver ${row.product.name}`}><Image src={row.product.photo} alt={row.product.name}/>{row.product.url&&<span className="sm-card-ar"><Box size={14}/> 3D</span>}</button><div className="sm-card-info"><button onClick={()=>openProduct(row.product)}><strong>{row.product.name}</strong><span>{row.product.description||row.product.cat||''}</span><b>{money(row.product.price)}</b></button><button className="sm-add" onClick={()=>change(row.product.id,(cart[row.product.id]||0)+1)} aria-label={`Adicionar ${row.product.name}`}><Plus size={18}/></button></div></article>)}{!filtered.length&&<div className="sm-empty">Nenhum produto encontrado. Tente outra categoria ou pesquisa.</div>}</div>
     <section id="sm-about" className="sm-about"><h2>Sobre o estabelecimento</h2><p>{restaurant.tagline||'Informações fornecidas pelo estabelecimento.'}</p>{restaurant.address&&<p><MapPin size={17}/>{restaurant.address}</p>}{restaurant.instagram&&<p><Instagram size={17}/>{'@'+restaurant.instagram.replace(/^@/,'')}</p>}</section>
   </div>
   {numItems>0&&!cartOpen&&<button className="sm-floating-cart" onClick={()=>setCartOpen(true)}><ShoppingBag size={20}/>{numItems} {numItems===1?'item':'itens'} <b>{money(total)}</b><ChevronRight size={19}/></button>}

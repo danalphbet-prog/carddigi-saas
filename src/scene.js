@@ -5,8 +5,9 @@ const loader = new GLTFLoader();
 
 // Normaliza os modelos do gerador 3D (que chegam com escala arbitrária).
 // Os tamanhos são estimativas ajustáveis, não medidas dos alimentos reais.
-export async function loadProduct(product) {
-  const gltf = await loader.loadAsync(product.url);
+export async function loadProduct(product, onProgress) {
+  // O GLB continua sendo preparado antes da câmera, como na V10.
+  const gltf = await loader.loadAsync(product.url, onProgress);
   const model = gltf.scene;
   model.updateMatrixWorld(true);
   const rawBounds = new THREE.Box3().setFromObject(model);

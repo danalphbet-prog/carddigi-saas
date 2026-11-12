@@ -108,6 +108,18 @@
         },
         "coverY": {
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+        },
+        "menuFontGroup": {
+          ".validate": "newData.isString() && (newData.val() === 'luxuoso' || newData.val() === 'moderno' || newData.val() === 'descontraido' || newData.val() === 'editorial' || newData.val() === 'compacto')"
+        },
+        "menuCategoryGroups": {
+          ".validate": "newData.isBoolean()"
+        },
+        "menuTemplateId": {
+          ".validate": "newData.isString() && newData.val() === 'grid-classico'"
+        },
+        "productDetailTemplateId": {
+          ".validate": "newData.isString() && newData.val() === 'detail-classico'"
         }
       }
     },
