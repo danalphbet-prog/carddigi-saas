@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {randomUUID} from 'node:crypto';
 import {getApps,initializeApp,cert,applicationDefault} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {getAppCheck} from 'firebase-admin/app-check';
@@ -30,6 +31,7 @@ function headers(req,res){
     res.setHeader('Vary','Origin');
     res.setHeader('Access-Control-Allow-Methods',allowedMethods);
     res.setHeader('Access-Control-Allow-Headers',allowedHeaders);
+    res.setHeader('Access-Control-Expose-Headers','X-Request-ID');
     res.setHeader('Access-Control-Max-Age','600');
   }
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -75,9 +77,15 @@ function send(res,status,value){
   res.end(JSON.stringify(value));
 }
 const server=http.createServer(async(req,res)=>{
+  const requestId=randomUUID(),startedAt=Date.now();
+  let requestPath='(unresolved)',errorCode='';
+  const slowTimer=setTimeout(()=>console.warn('[Mezzira API] DEMORA',JSON.stringify({requestId,method:req.method,route:requestPath,elapsedMs:Date.now()-startedAt})),12000);
+  res.setHeader('X-Request-ID',requestId);
   try{
     headers(req,res);
     const path=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`).pathname;
+    requestPath=path.slice(0,120);
+    if(req.method==='POST')console.info('[Mezzira API] INICIO',JSON.stringify({requestId,method:req.method,route:requestPath}));
     if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
     if(req.method==='GET'&&path==='/api/v1/health')return send(res,200,{ok:true,service:'mezzira-api',version:13});
     if(req.method!=='POST')fail(404,'Rota inexistente.','not_found');
@@ -108,9 +116,18 @@ const server=http.createServer(async(req,res)=>{
     fail(404,'Rota inexistente.','not_found');
   }catch(e){
     const status=e instanceof ApiError?e.status:500;
-    if(status===500)console.error('[Mezzira API]',e);
-    if(!res.headersSent)send(res,status,{error:e instanceof ApiError?e.message:'Falha interna. Tente novamente.',code:e instanceof ApiError?e.code:'server_error'});
+    errorCode=e instanceof ApiError?e.code:'server_error';
+    if(status===500)console.error('[Mezzira API] Erro interno',{requestId,requestPath,name:e?.name||'Error',message:e?.message||''},e?.stack||'');
+    if(!res.headersSent)send(res,status,{error:e instanceof ApiError?e.message:'Falha interna. Tente novamente.',code:errorCode,requestId});
     else res.end();
+  }finally{
+    clearTimeout(slowTimer);
+    // Sem body, tokens, IPs ou dados pessoais: apenas diagnóstico da rota.
+    if(requestPath!=='/api/v1/health'||res.statusCode>=400){
+      const entry={requestId,method:req.method,route:requestPath,status:res.statusCode,durationMs:Date.now()-startedAt};
+      if(errorCode)entry.code=errorCode;
+      console.info('[Mezzira API] HTTP',JSON.stringify(entry));
+    }
   }
 });
 server.listen(PORT,'0.0.0.0',()=>console.log(`[Mezzira API v13] Porta ${PORT}`));

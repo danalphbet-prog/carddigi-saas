@@ -143,3 +143,19 @@
 .savor-client .sm-cart-overlay{background:rgba(9,15,12,.64)}
 .savor-client .sm-detail-image{background:var(--sm-cream2)}
 .savor-client .sm-card-info b,.savor-client .sm-detail-copy .sm-price{color:var(--sm-olive)}
+
+/* Mezzira V13.1: alertas no checkout */
+.sm-checkout-alert{border:1px solid #e5bd7f;background:#fff7ec;color:#643c17;border-radius:15px;padding:14px;margin:15px 0 6px;box-shadow:0 5px 18px rgba(87,53,17,.07)}
+.sm-alert-head{display:flex;align-items:flex-start;gap:10px}
+.sm-alert-head>svg{flex-shrink:0;color:#b46b1a;margin-top:2px}
+.sm-alert-copy{flex:1;min-width:0}
+.sm-alert-copy strong{display:block;font-size:14px;line-height:1.35}
+.sm-alert-copy p{font-size:12px;line-height:1.55;margin:5px 0 0;overflow-wrap:anywhere}
+.sm-alert-copy small{font-size:10px;opacity:.82;display:block;margin-top:8px;overflow-wrap:anywhere}
+.sm-alert-close{background:transparent;border:0;cursor:pointer;padding:2px;color:inherit;flex-shrink:0}
+.sm-alert-retry{display:inline-flex;align-items:center;gap:7px;border:1px solid #c28e48;border-radius:10px;background:#fff;color:#71431b;font-weight:750;padding:10px 13px;margin:12px 0 0 30px;cursor:pointer}
+.sm-alert-retry:disabled{opacity:.5;cursor:wait}
+.sm-checkout-delay{display:flex;align-items:center;gap:9px;border-radius:11px;background:#f3f0e8;color:#665b46;padding:11px;margin-top:12px;font-size:12px;line-height:1.5}
+.sm-checkout-rotate{flex-shrink:0;animation:smCheckoutSpin 1.2s linear infinite}
+@keyframes smCheckoutSpin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sm-checkout-rotate{animation:none}}

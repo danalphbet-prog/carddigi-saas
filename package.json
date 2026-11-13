@@ -1,7 +1,7 @@
 {
   "name": "cardapio-imersivo-saas",
   "private": true,
-  "version": "13.0.0",
+  "version": "13.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
