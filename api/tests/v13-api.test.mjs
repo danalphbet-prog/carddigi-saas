@@ -30,6 +30,11 @@ class MemoryDb {
         for(const [k,v] of Object.entries(changes))write([...parts,...k.split('/').filter(Boolean)],v);
       },
       transaction:async transform=>{
+        if(db.simulateNullForCommerce && parts.length===2 && parts[0]==='commerce'){
+          db.simulateNullForCommerce=false;
+          if(transform(null)===undefined)
+            return {committed:false,snapshot:{val:read}};
+        }
         const proposed=transform(read());
         if(proposed===undefined)return {committed:false,snapshot:{val:read}};
         write(parts,proposed);
@@ -111,4 +116,16 @@ test('V13: produto com estoque ilimitado permanece disponível após confirmaç�
   await api.changeOrder(OWNER,rid,order.id,'confirmed');
   assert.equal(db.data.commerce[rid].products[pid].stockMode,'unlimited');
   assert.equal(db.data.publicMenus[rid].products[pid].stock,null);
+});
+
+test('V13.1.1: checkout resiste a null inicial',async()=>{
+  const {db,api,rid,pid}=await setup();
+  db.simulateNullForCommerce=true;
+  const order=await api.createOrder({
+    restaurantId:rid,
+    requestId:'afbc01d4-8bde-419d-ac83-9bcb1ed4ae28',
+    items:[{productId:pid,quantity:1}]
+  });
+  assert.equal(order.total,12.5);
+  assert.ok(db.data.commerce[rid].orders[order.id]);
 });

@@ -241,7 +241,9 @@ export function createService(db){
     let created=false;
     const trans=await db.ref(`commerce/${rid}`).transaction(current=>{
       created=false;
-      if(!current)return;
+      // Firebase pode iniciar a transacao com cache null.
+      // Retornar {} permite reconciliar com o estado remoto.
+      if(current===null)return {};
       const orders=current.orders||{};
       if(orders[id])return current; // retries are idempotent
       created=true;
@@ -251,9 +253,9 @@ export function createService(db){
       current.orders=orders;
       return current;
     },undefined,false);
-    if(!trans.committed)fail(503,'Não foi possível registrar o pedido.');
+    if(!trans.committed)fail(503,'Não foi possível registrar o pedido.','order_transaction_aborted');
     const order=trans.snapshot.val()?.orders?.[id];
-    if(!order)fail(503,'Pedido não foi confirmado pelo banco.');
+    if(!order)fail(503,'Pedido não foi confirmado pelo banco.','order_missing_after_commit');
     await db.ref(`orders/${rid}/${id}`).set(order); // replica de leitura do painel atual
     // Indicador comercial autoritativo: visitantes não podem falsificar este evento.
     if(created){try {await businessEvent(rid,'order_intent');}catch(e){console.warn('[Mezzira] Métrica de pedido não gravada:',e?.message);}}
