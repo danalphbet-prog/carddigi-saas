@@ -1,14 +1,11 @@
 // Eventos anônimos agregáveis. Nenhuma identidade, IP ou conteúdo do pedido é enviado.
-import {ref,push,set,serverTimestamp} from 'firebase/database';
-import {db} from './firebase.js';
-const allowed=new Set(['view','exit','order_intent','ar_open','error']);
+import {apiRequest} from './api-client.js';
+const allowed=new Set(['view','exit','ar_open','error','product_view','add_to_cart','checkout_started']);
 const text=(s,max=180)=>String(s||'').replace(/[\r\n\t]/g,' ').slice(0,max);
 export async function trackEvent(restaurantId,type,details='') {
-  if(!db || !restaurantId || !allowed.has(type))return;
-  try {
-    const key=push(ref(db,`analytics/${restaurantId}/events`));
-    await set(key,{type,at:serverTimestamp(),message:text(details,180)});
-  }catch{/* métricas jamais impedem o visitante de navegar */}
+  if(!restaurantId || !allowed.has(type))return;
+  try {await apiRequest('events',{restaurantId,type,message:text(details,180)});}
+  catch{/* telemetria jamais impede compra ou navegação */}
 }
 export function trackVisit(restaurantId) {
   try {

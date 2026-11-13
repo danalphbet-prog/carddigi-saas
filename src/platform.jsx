@@ -6,12 +6,13 @@ import { MarketingLanding, AuthPage } from './Marketing.jsx';
 import {
   configured, auth, db, store, loginGoogle, uploadMedia,
   signOut, onAuthStateChanged,
-  now, restaurantDoc, productDoc, productCollection, requestCollection, atomicUpdate,
+  now, restaurantDoc, productDoc, productCollection, requestCollection,
 } from './firebase.js';
 
 import { MAX_REFERENCE_PHOTOS, MAX_BASE64_CHARS } from './media.js';
 import { errText } from './errors.js';
-import { makePublicSlug, publicMenuPath } from './slug.js';
+import { publicMenuPath } from './slug.js';
+import {apiAdmin,wakeApi} from './api-client.js';
 import { shouldRedirectToBusiness } from './authRoutes.js';
 import { createOrderIntent } from './orders.js';
 import { trackVisit, trackEvent, installErrorReporting } from './telemetry.js';
@@ -92,28 +93,36 @@ function decodeMenuHandle(path){
     return /^[A-Za-z0-9_-]{1,120}$/.test(value)?value:'';
   }catch{return '';}
 }
+function usePublicMenu(rid) {
+  const [restaurant,setRestaurant]=useState(null);
+  const [state,setState]=useState('loading');
+  useEffect(()=>{
+    if(!db||!rid){setState('missing');return;}
+    setState('loading');setRestaurant(null);
+    return onSnapshot(doc(db,'publicMenus',rid),snap=>{
+      setRestaurant(snap.exists()?{id:rid,...snap.data()}:null);
+      setState(snap.exists()?'ok':'missing');
+    },e=>setState(errText(e)));
+  },[rid]);
+  return [restaurant,state];
+}
 function Consumer({handle}) {
   const resolved=useResolvedRestaurant(handle);
   const rid=resolved.rid;
-  const [r, state]=useRestaurant(rid);
-  const [prods,error,productsLoaded]=useProducts(rid,true);
-  const [models,,modelsLoaded]=useLive('modelCatalog');
+  const [r,state]=usePublicMenu(rid);
   const onMenuEvent=React.useCallback((type,message)=>trackEvent(rid,type,message),[rid]);
   const onOrder=React.useCallback((order)=>createOrderIntent(rid,order),[rid]);
   useEffect(()=>{
     if(resolved.loading||state!=='ok'||!r?.published)return;
+    wakeApi(); // aquece a API sem bloquear o primeiro render do Static Site
     trackVisit(rid);
     const unlisten=installErrorReporting(rid);
     const onHide=()=>{void trackEvent(rid,'exit')};
     window.addEventListener('pagehide',onHide);
     return()=>{unlisten();window.removeEventListener('pagehide',onHide)};
   },[rid,resolved.loading,state,r?.published]);
-  useEffect(()=>{if(rid&&error)void trackEvent(rid,'error',error)},[error,rid]);
-  // Mostra o aplicativo apenas depois de resolver estabelecimento, produtos e catálogo 3D.
-  // Erros e cardápios inexistentes também encerram o splash para exibir a mensagem apropriada.
   useEffect(()=>{
-    if (configured && (resolved.loading || state==='loading' || (state==='ok' && r?.published && (!productsLoaded || !modelsLoaded)))) return;
-    // Espera também a capa do hero decodificar (ou até 3,5 s), evitando exibir metade da imagem.
+    if (configured && (resolved.loading || state==='loading')) return;
     let alive=true;
     let timeout;
     const reveal=()=>{if(alive)window.dispatchEvent(new Event('mezzira:ready'));};
@@ -124,13 +133,13 @@ function Consumer({handle}) {
     timeout=window.setTimeout(reveal,3500);
     image.src=r.cover;
     return()=>{alive=false;clearTimeout(timeout);image.onload=null;image.onerror=null;};
-  },[resolved.loading,state,r?.published,r?.cover,productsLoaded,modelsLoaded]);
+  },[resolved.loading,state,r?.published,r?.cover]);
   if(!configured)return <Busy>Não foi possível carregar o cardápio no momento.</Busy>;
-  if(resolved.loading||state==='loading'||(state==='ok'&&r?.published&&(!productsLoaded||!modelsLoaded)))return <Busy>Abrindo cardápio…</Busy>;
+  if(resolved.loading||state==='loading')return <Busy>Abrindo cardápio…</Busy>;
   if(!r||!r.published)return <Busy>Este cardápio não está publicado ou não existe.</Busy>;
-  const mapped=prods.map(p=>({...p,url:models.find(m=>m.id===p.modelId&&m.active)?.url||'',photo:p.photo||'',ingredients:Array.isArray(p.ingredients)?p.ingredients:[],cat:p.cat||'Outros',price:Number(p.price||0),diameter:Number(p.diameter||.2),kcal:Number(p.kcal||0)}));
+  const mapped=Object.entries(r.products||{}).map(([id,p])=>({id,...p,photo:p.photo||'',ingredients:Array.isArray(p.ingredients)?p.ingredients:[],cat:p.cat||'Outros',price:Number(p.price||0),diameter:Number(p.diameter||.2),kcal:Number(p.kcal||0)}));
   const cats=['Todos',...new Set(mapped.map(p=>p.cat))];
-  return <MenuErrorBoundary key={rid} rid={rid}>{error&&<Notice error={error}/>}<SavorMenu restaurant={r} products={mapped} categories={cats} onEvent={onMenuEvent} onOrder={onOrder}/></MenuErrorBoundary>;
+  return <MenuErrorBoundary key={rid} rid={rid}><SavorMenu restaurant={r} products={mapped} categories={cats} onEvent={onMenuEvent} onOrder={onOrder}/></MenuErrorBoundary>;
 }
 
 function ProductEditor({rid, product, onClose}) {
@@ -159,7 +168,7 @@ function ProductEditor({rid, product, onClose}) {
       if (!Number.isFinite(price) || price < 0 || price > 100000) throw Error('Preço inválido.');
       if (!Number.isFinite(diameter) || diameter < .05 || diameter > 2) throw Error('Diâmetro precisa estar entre 0,05 e 2 metros.');
       if(stockMode==='limited'&&(fields.stock===''||!Number.isInteger(Number(fields.stock))||Number(fields.stock)<0||Number(fields.stock)>1000000))throw Error('Informe um saldo inteiro entre 0 e 1.000.000 ou selecione Ilimitado.');
-      const obj = {name:fields.name.trim().slice(0,120),description:fields.description.trim().slice(0,1200),cat:slug(fields.cat).slice(0,70)||'Outros',price,kcal:Math.max(0,Number(fields.kcal)||0),diameter,roughness:Math.min(1,Math.max(0,Number(fields.roughness)||.75)), ingredients:fields.ingredients.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,25),emoji:fields.emoji.trim().slice(0,10),prompt:fields.prompt.trim().slice(0,200),photo:fields.photo||'',referencePhotos:fields.referencePhotos.slice(0,MAX_REFERENCE_PHOTOS),active:!!fields.active,stock:stockMode==='unlimited'?null:Number(fields.stock),modelId:fields.modelId || '',updatedAt:now()};
+      const obj = {name:fields.name.trim().slice(0,120),description:fields.description.trim().slice(0,1200),cat:slug(fields.cat).slice(0,70)||'Outros',price,kcal:Math.max(0,Number(fields.kcal)||0),diameter,roughness:Math.min(1,Math.max(0,Number(fields.roughness)||.75)), ingredients:fields.ingredients.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,25),emoji:fields.emoji.trim().slice(0,10),prompt:fields.prompt.trim().slice(0,200),photo:fields.photo||'',referencePhotos:fields.referencePhotos.slice(0,MAX_REFERENCE_PHOTOS),active:!!fields.active,stock:stockMode==='unlimited'?null:Number(fields.stock),modelId:fields.modelId || '',stockRevision:fields.stockRevision??0,updatedAt:now()};
       if(product?.id) await updateDoc(productDoc(rid, product.id), obj);
       else await addDoc(productCollection(rid), {...obj,modelStatus:'none',createdAt:now()});
       onClose();
@@ -213,13 +222,14 @@ function RestaurantOrders({rid}) {
   const [search,setSearch]=useState('');
   const [notice,setNotice]=useState(''),[busy,setBusy]=useState('');
   const statuses={initiated:'Aguardando confirmação',confirmed:'Confirmado',preparing:'Em preparo',completed:'Concluído',cancelled:'Cancelado'};
+  const transitions={initiated:['confirmed','cancelled'],confirmed:['preparing','completed','cancelled'],preparing:['completed','cancelled'],completed:[],cancelled:[]};
   const change=async(order,status)=>{
     setBusy(order.id);setNotice('');
     try {await updateDoc(doc(db,'orders',rid,order.id),{status,updatedAt:now()});setNotice('Situação do pré-pedido atualizada.');}
     catch(e){setNotice(errText(e));}finally{setBusy('');}
   };
   return <section className="panel"><h2>Pré-pedidos do cardápio</h2><p className="subtle">Os registros abaixo são criados quando o visitante toca em “Fazer pedido no WhatsApp”. A confirmação, o pagamento e o envio da mensagem precisam ser conferidos com o cliente.</p><Notice error={error} ok={notice}/><input aria-label="Pesquisar pedidos" placeholder="Buscar cliente, número ou observação..." value={search} onChange={e=>setSearch(e.target.value)} style={{maxWidth:480,marginBottom:12}}/>
-    {orders.length?<div className="orders-list">{orders.filter(o=>[o.code,o.customerName,o.notes].join(' ').toLowerCase().includes(search.toLowerCase())).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,100).map(o=><article className="order-card" key={o.id}><div className="order-head"><strong>#{o.code||o.id.slice(-6).toUpperCase()}</strong><span>{o.createdAt?new Date(o.createdAt).toLocaleString('pt-BR'):'Agora'}</span></div><h3>{o.customerName||'Cliente não identificado'}</h3><ul>{(Array.isArray(o.items)?o.items:Object.values(o.items||{})).map((item,i)=><li key={i}>{item.quantity} × {item.name} — {BRL(item.price*item.quantity)}</li>)}</ul><p>{o.notes||'Sem observações'}</p><div className="order-foot"><strong>{BRL(o.total)}</strong><label>Etapa<select disabled={busy===o.id} value={o.status||'initiated'} onChange={e=>change(o,e.target.value)}>{Object.entries(statuses).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label></div></article>)}</div>:<p className="empty">Nenhum pré-pedido registrado.</p>}
+    {orders.length?<div className="orders-list">{orders.filter(o=>[o.code,o.customerName,o.notes].join(' ').toLowerCase().includes(search.toLowerCase())).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,100).map(o=><article className="order-card" key={o.id}><div className="order-head"><strong>#{o.code||o.id.slice(-6).toUpperCase()}</strong><span>{o.createdAt?new Date(o.createdAt).toLocaleString('pt-BR'):'Agora'}</span></div><h3>{o.customerName||'Cliente não identificado'}</h3><ul>{(Array.isArray(o.items)?o.items:Object.values(o.items||{})).map((item,i)=><li key={i}>{item.quantity} × {item.name} — {BRL(item.price*item.quantity)}</li>)}</ul><p>{o.notes||'Sem observações'}</p><div className="order-foot"><strong>{BRL(o.total)}</strong><label>Etapa<select disabled={busy===o.id} value={o.status||'initiated'} onChange={e=>change(o,e.target.value)}>{Object.entries(statuses).filter(([value])=>value===o.status||transitions[o.status]?.includes(value)).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label></div></article>)}</div>:<p className="empty">Nenhum pré-pedido registrado.</p>}
   </section>;
 }
 function RestaurantPanel({rid,user,admin}) {
@@ -336,81 +346,46 @@ function Admin({user,site}) {
   const allErrors=allEvents.filter(e=>e.type==='error');
   const eventsFor=(rid)=>allEvents.filter(e=>e.restaurantId===rid);
   const act=async(q,status)=>{
-    setBusy(q.id);setNotice('');try{
+    setBusy(q.id);setNotice('');
+    try{
       let modelId='';
-      if(status==='delivered') {
-        modelId=window.prompt('Informe o ID de um modelo ativo do catálogo (veja aba Modelos):')?.trim() || '';
-        if(!models.some(m=>m.id===modelId && m.active))throw Error('Escolha um ID de modelo ativo válido.');
+      if(status==='delivered'){
+        modelId=window.prompt('Informe o ID de um modelo ativo do catálogo (veja aba Modelos):')?.trim()||'';
+        if(!models.some(m=>m.id===modelId&&m.active))throw Error('Escolha um ID de modelo ativo válido.');
       }
-      await updateDoc(doc(db,'modelRequests',q.id),{status,updatedAt:now(),...(status==='delivered'?{deliveredAt:now(),modelId}:{})});
-      if(status==='delivered')await updateDoc(productDoc(q.restaurantId,q.productId),{modelId,modelStatus:'delivered',updatedAt:now()});
-      if(status==='in_progress')await updateDoc(productDoc(q.restaurantId,q.productId),{modelStatus:'in_progress',updatedAt:now()});
-      setNotice(status==='delivered'?'Modelo do catálogo vinculado ao produto.':'Solicitação atualizada.');
+      await updateDoc(doc(db,'modelRequests',q.id),{status,modelId});
+      setNotice(status==='delivered'?'Modelo vinculado ao produto.':'Solicitação atualizada.');
     }catch(e){setNotice(errText(e));}finally{setBusy(null);}
   };
   const reviewPublication=async(q,decision)=>{
-    const r=restaurants.find(x=>x.id===q.restaurantId);
-    if(!r) return setNotice('Estabelecimento não encontrado.');
     setBusy(q.id);setNotice('');
     try{
-      if(decision==='rejected'){
-        await atomicUpdate({[`publicationRequests/${q.id}/status`]:'rejected',[`publicationRequests/${q.id}/reviewedAt`]:now(),[`restaurants/${r.id}/publicationStatus`]:'rejected'});
-        setNotice('Solicitação devolvida para revisão.');return;
-      }
-      if(!/^55\d{10,11}$/.test(r.whatsapp||''))throw Error('O restaurante precisa cadastrar um WhatsApp válido antes da aprovação.');
-      const all=await getDoc(productCollection(r.id));
-      if(!Object.values(all.data()||{}).some(p=>p?.active))throw Error('O cardápio precisa de pelo menos um produto ativo.');
-      let slug=r.slug || '';
-      if(!slug) {
-        // Confere se o sufixo de quatro caracteres ainda está livre.
-        for(let i=0;i<20;i++) {
-          const candidate=makePublicSlug(r.name);
-          const exists=await getDoc(doc(db,'slugIndex',candidate));
-          if(!exists.exists()){slug=candidate;break;}
-        }
-      }
-      if(!slug)throw Error('Não foi possível criar um endereço disponível. Tente novamente.');
-      await atomicUpdate({
-        [`slugIndex/${slug}`]:r.id,
-        [`restaurants/${r.id}/slug`]:slug,
-        [`restaurants/${r.id}/published`]:true,
-        [`restaurants/${r.id}/publicationStatus`]:'approved',
-        [`restaurants/${r.id}/reviewedAt`]:now(),
-        [`publicationRequests/${q.id}/status`]:'approved',
-        [`publicationRequests/${q.id}/reviewedAt`]:now(),
-        [`publicationRequests/${q.id}/slug`]:slug,
-      });
-      setNotice(`Cardápio publicado: ${location.origin}/menu/${slug}`);
+      const response=await apiAdmin('publications',{requestId:q.id,decision});
+      setNotice(decision==='approved'?`Cardápio publicado: ${location.origin}/menu/${response.slug}`:'Solicitação devolvida para revisão.');
     }catch(e){setNotice(errText(e));}finally{setBusy(null);}
   };
   const assignLegacyLink=async(r)=>{
-    setNotice('');
-    if(r.slug)return;
-    setBusy(r.id);
+    setNotice('');setBusy(r.id);
     try{
-      let result='';
-      for(let i=0;i<20;i++){
-        const candidate=makePublicSlug(r.name);
-        if(!(await getDoc(doc(db,'slugIndex',candidate))).exists()){result=candidate;break;}
-      }
-      if(!result)throw Error('Não foi possível criar um endereço. Tente novamente.');
-      await atomicUpdate({[`slugIndex/${result}`]:r.id,[`restaurants/${r.id}/slug`]:result,[`restaurants/${r.id}/publicationStatus`]:r.published?'approved':'paused',[`restaurants/${r.id}/updatedAt`]:now()});
-      setNotice('Endereço público atualizado para: '+location.origin+'/menu/'+result);
+      const response=await apiAdmin('slug',{restaurantId:r.id});
+      setNotice('Endereço público atualizado: '+location.origin+'/menu/'+response.slug);
     }catch(e){setNotice(errText(e));}finally{setBusy(null);}
   };
   const pauseRestaurant=async(r)=>{
     if(!window.confirm(`${r.published?'Retirar do ar':'Liberar novamente'} o cardápio "${r.name}"?`))return;
-    try{
-      // A retomada só funciona para estabelecimentos que já passaram pela aprovação.
-      if(!r.published && (!r.slug || r.publicationStatus==='draft'))throw Error('Aprovação inicial obrigatória. Abra a solicitação de publicação.');
-      await updateDoc(restaurantDoc(r.id),{published:!r.published,publicationStatus:r.published?'paused':'approved',updatedAt:now()});
-      setNotice('Situação do cardápio atualizada.');
-    }catch(e){setNotice(errText(e));}
+    setBusy(r.id);
+    try{await apiAdmin('toggle-publication',{restaurantId:r.id});setNotice('Situação do cardápio atualizada.');}
+    catch(e){setNotice(errText(e));}finally{setBusy(null);}
+  };
+  const rebuild=async()=>{
+    setNotice('');setBusy('rebuild');
+    try{const {count}=await apiAdmin('rebuild-public-menus',{});setNotice(`${count} cardápios sincronizados com a projeção pública V13.`);}
+    catch(e){setNotice(errText(e));}finally{setBusy(null);}
   };
   const pending=publicationRequests.filter(q=>q.status==='pending').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const currentTab={publications:'Publicações',analytics:'Indicadores',errors:'Erros',queue:'Modelos AR',models:'Catálogo 3D',restaurants:'Restaurantes',site:'Site'}[tab];
   return <div className="platform-page"><SiteHeader user={user} brand="Mezzira"/><div className="dashboard-wrap">
-    <div className="dashboard-title"><div><div className="eyebrow">CENTRAL DE GESTÃO</div><h1>Controle da plataforma</h1><p>Publicações, estabelecimentos, solicitações e qualidade do serviço, em um só lugar.</p></div><A href="/painel" className="p-btn p-outline">Minha conta</A></div>
+    <div className="dashboard-title"><div><div className="eyebrow">CENTRAL DE GESTÃO</div><h1>Controle da plataforma</h1><p>Publicações, estabelecimentos, solicitações e qualidade do serviço, em um só lugar.</p></div><div className="admin-actions"><button disabled={!!busy} onClick={rebuild}>Sincronizar catálogos V13</button><A href="/painel" className="p-btn p-outline">Minha conta</A></div></div>
     <div className="stat-grid"><div><strong>{restaurants.length}</strong><span>Estabelecimentos</span></div><div><strong>{pending.length}</strong><span>Publicações pendentes</span></div><div><strong>{allEvents.filter(e=>e.type==='view').length}</strong><span>Visitas registradas</span></div><div><strong>{allErrors.length}</strong><span>Erros coletados</span></div></div>
     <div className="tabbar admin-tabbar">{[['publications','Aprovações'],['analytics','Gráficos'],['errors','Erros'],['queue','Solicitações AR'],['models','Biblioteca 3D'],['restaurants','Restaurantes'],['site','Site']].map(([id,name])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{name}{id==='publications'&&pending.length?` (${pending.length})`:''}</button>)}</div>
     <Notice error={restaurantsError||requestError||pubError||analyticsError} ok={notice}/>

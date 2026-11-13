@@ -1,8 +1,9 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {ArrowLeft,ArrowRight,ShoppingBag,Plus,Minus, X, Search, MapPin, Instagram, MessageCircle, Box, ScanLine, Camera, ChevronRight, Heart, UtensilsCrossed, SlidersHorizontal, Check, Globe} from 'lucide-react';
 import {Viewer, ARSession} from './ar-viewer.jsx';
 import './savor-menu.css';
+import {wakeApi} from './api-client.js';
 import {paletteById,fontById,fontGroupById,clampCover,checkoutIntro,getPromotions} from './menu-design.js';
 import {resolveTemplates} from './template-system.js';
 
@@ -12,10 +13,24 @@ function Image({src,alt='',className=''}){return src?<img className={className} 
 export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},onOrder=()=>{}}){
  const [cat,setCat]=useState('Todos'),[search,setSearch]=useState(''),[opened,setOpened]=useState(null),[count,setCount]=useState(1),[cart,setCart]=useState({}),[cartOpen,setCartOpen]=useState(false),[mode,setMode]=useState('photo'),[ar,setAr]=useState(null),[viewerError,setViewerError]=useState(''),[clientName,setClientName]=useState(''),[notes,setNotes]=useState(''),[msg,setMsg]=useState('');
  const [economy,setEconomy]=useState(false);
+ const [checkoutBusy,setCheckoutBusy]=useState(false);
+ const requestIdRef=useRef(null);
  const [promoIndex,setPromoIndex]=useState(0);
  const promos=useMemo(()=>getPromotions(restaurant),[restaurant]);
  useEffect(()=>{setPromoIndex(0);if(promos.length<2)return;const timer=setInterval(()=>setPromoIndex(n=>(n+1)%promos.length),3000);return()=>clearInterval(timer);},[promos.length,restaurant.id,restaurant.promotions]);
  const available=useMemo(()=>products.filter(p=>p.active!==false && !(Number.isFinite(p.stock)&&p.stock===0)),[products]);
+ useEffect(()=>{setCart(previous=>{
+   const next={};
+   for(const [id,n] of Object.entries(previous)){
+     const product=available.find(p=>p.id===id);
+     if(!product)continue;
+     const qty=Math.min(50,Math.max(0,n),Number.isFinite(product.stock)?product.stock:50);
+     if(qty>0)next[id]=qty;
+   }
+   const changed=Object.keys(previous).length!==Object.keys(next).length||Object.keys(previous).some(id=>previous[id]!==next[id]);
+   return changed?next:previous;
+ });},[available]);
+ useEffect(()=>{if(cartOpen)wakeApi();},[cartOpen]);
  const filtered=useMemo(()=>available.filter(p=>(cat==='Todos'||p.cat===cat)&&(!search||[p.name,p.cat,p.description].join(' ').toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))),[available,cat,search]);
  const total=available.reduce((s,p)=>s+Number(p.price||0)*(cart[p.id]||0),0);
  const numItems=Object.values(cart).reduce((s,n)=>s+n,0);
@@ -23,22 +38,30 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
  const closeAr=()=>setAr(null);
  useEffect(()=>{if(!ar)return;return()=>ar.overlay.remove()},[ar]);
  useEffect(()=>{const fn=e=>{if(e.key==='Escape'){setOpened(null);setCartOpen(false)}};window.addEventListener('keydown',fn);return()=>window.removeEventListener('keydown',fn)},[]);
- const openProduct=p=>{setOpened(p.id);setCount(1);setMode('photo');setViewerError('');window.scrollTo({top:0,behavior:'instant'})};
- const change=(id,n)=>setCart(prev=>{const next={...prev};const value=Math.max(0,n);if(value)next[id]=value;else delete next[id];return next});
+ const openProduct=p=>{onEvent('product_view',p.id);setOpened(p.id);setCount(1);setMode('photo');setViewerError('');window.scrollTo({top:0,behavior:'instant'})};
+ const change=(id,n)=>{requestIdRef.current=null;if(n>0){onEvent('add_to_cart',id);wakeApi();}setCart(prev=>{const next={...prev};const product=available.find(p=>p.id===id);const value=Math.min(50,Math.max(0,n),Number.isInteger(product?.stock)?product.stock:50);if(value)next[id]=value;else delete next[id];return next});};
  const startAR=()=>{
   if(!chosen?.url)return;
   const overlay=document.createElement('div');overlay.className='ar-screen';document.body.appendChild(overlay);
   const sessionP=window.isSecureContext&&navigator.xr?navigator.xr.requestSession('immersive-ar',{requiredFeatures:['hit-test'],optionalFeatures:['local-floor','anchors','light-estimation','dom-overlay'],domOverlay:{root:overlay}}):Promise.reject(Error('Seu navegador ou aparelho não oferece suporte à realidade aumentada.'));
   sessionP.catch(()=>{});onEvent('ar_open');setAr({product:chosen,overlay,sessionP,restaurant:{...restaurant},economy});
  };
- const checkout=()=>{
+ const checkout=async()=>{
+  if(checkoutBusy)return;
   const phone=tel(restaurant.whatsapp);
   if(!/^55\d{10,11}$/.test(phone)){setMsg('Este estabelecimento ainda não cadastrou um WhatsApp válido.');return;}
-  const rows=available.filter(p=>cart[p.id]).map(p=>({name:p.name,quantity:cart[p.id],price:Number(p.price)}));
+  const rows=available.filter(p=>cart[p.id]).map(p=>({productId:p.id,quantity:cart[p.id]}));
   if(!rows.length)return;
-  const code=onOrder({customerName:clientName.trim(),notes:notes.trim(),items:rows});
-  const lines=[`*Pedido — ${restaurant.name}*`,...(code?[`Referência #${code}`]:[]),'',...rows.map(x=>`${x.quantity}x ${x.name} — ${money(x.price*x.quantity)}`),'',`*Total: ${money(total)}*`,...(clientName.trim()?[`Nome: ${clientName.trim()}`]:[]),...(notes.trim()?[`Observações: ${notes.trim()}`]:[]),'',checkoutIntro(restaurant.whatsappIntro)];
-  onEvent('order_intent');window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`,'_blank','noopener,noreferrer');
+  setMsg('');setCheckoutBusy(true);onEvent('checkout_started');
+  try{
+    if(!requestIdRef.current)requestIdRef.current=crypto.randomUUID();
+    const order=await onOrder({requestId:requestIdRef.current,customerName:clientName.trim(),notes:notes.trim(),items:rows});
+    if(!order?.id||!Array.isArray(order.items))throw Error('O pedido não foi registrado. Tente novamente.');
+    const lines=[`*Pedido — ${restaurant.name}*`,`Referência #${order.code}`,'',...order.items.map(x=>`${x.quantity}x ${x.name} — ${money(x.subtotalCents/100)}`),'',`*Total: ${money(order.total)}*`,...(clientName.trim()?[`Nome: ${clientName.trim()}`]:[]),...(notes.trim()?[`Observações: ${notes.trim()}`]:[]),'',checkoutIntro(restaurant.whatsappIntro)];
+    // Navegar na mesma aba evita bloqueio de popup após a resposta assíncrona do servidor.
+    window.location.assign(`https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`);
+  }catch(e){setMsg(e?.message||'Falha ao registrar o pedido. Não enviamos a mensagem.');}
+  finally{setCheckoutBusy(false);}
  };
  const palette=paletteById(restaurant.menuPalette);
  const font=fontById(restaurant.menuFont);
@@ -77,7 +100,7 @@ export function SavorMenu({restaurant,products=[],categories=[],onEvent=()=>{},o
     <div className="sm-detail-actions">{chosen.url&&<button className="sm-ar-action" onClick={startAR}><ScanLine size={20}/> Visualizar na minha mesa (AR)</button>}<div className="sm-purchase"><div><button onClick={()=>setCount(Math.max(1,count-1))}><Minus size={19}/></button><strong>{count}</strong><button onClick={()=>setCount(Math.min(50,count+1))}><Plus size={19}/></button></div><button onClick={()=>{change(chosen.id,(cart[chosen.id]||0)+count);setOpened(null)}}>Adicionar · {money(chosen.price*count)} <ArrowRight size={18}/></button></div></div>
   </div>}
   {cartOpen&&<div className="sm-cart-overlay" onClick={()=>setCartOpen(false)}><div className="sm-cart-drawer" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Carrinho"><div className="sm-cart-head"><div><small>SEU PEDIDO</small><h2>Carrinho</h2></div><button onClick={()=>setCartOpen(false)} aria-label="Fechar carrinho"><X/></button></div>{numItems?available.filter(p=>cart[p.id]).map(p=><div className="sm-cart-row" key={p.id}><Image src={p.photo} alt={p.name}/><div><b>{p.name}</b><small>{money(p.price)} cada</small><div><button onClick={()=>change(p.id,cart[p.id]-1)}><Minus size={16}/></button><strong>{cart[p.id]}</strong><button onClick={()=>change(p.id,cart[p.id]+1)}><Plus size={16}/></button></div></div><strong>{money(p.price*cart[p.id])}</strong></div>):<p className="sm-empty">Seu carrinho está vazio.</p>}
-   <div className="sm-cart-total"><span>Total</span><strong>{money(total)}</strong></div><label>Seu nome (opcional)<input maxLength={70} value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Como podemos chamar você?"/></label><label>Observações (opcional)<textarea maxLength={300} rows={2} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Ex.: sem cebola, retirar no local..."/></label>{msg&&<p className="sm-error">{msg}</p>}<button disabled={!numItems} className="sm-checkout" onClick={checkout}><MessageCircle size={19}/> Fazer pedido no WhatsApp <ArrowRight size={18}/></button><p className="sm-cart-note">A mensagem será aberta no WhatsApp. O envio, o pagamento e a confirmação do pedido acontecem com o restaurante.</p>
+   <div className="sm-cart-total"><span>Total</span><strong>{money(total)}</strong></div><label>Seu nome (opcional)<input maxLength={70} value={clientName} onChange={e=>{requestIdRef.current=null;setClientName(e.target.value)}} placeholder="Como podemos chamar você?"/></label><label>Observações (opcional)<textarea maxLength={300} rows={2} value={notes} onChange={e=>{requestIdRef.current=null;setNotes(e.target.value)}} placeholder="Ex.: sem cebola, retirar no local..."/></label>{msg&&<p className="sm-error">{msg}</p>}<button disabled={!numItems||checkoutBusy} className="sm-checkout" onClick={checkout}><MessageCircle size={19}/> {checkoutBusy?'Validando pedido…':'Fazer pedido no WhatsApp'} <ArrowRight size={18}/></button><p className="sm-cart-note">A mensagem será aberta no WhatsApp. O envio, o pagamento e a confirmação do pedido acontecem com o restaurante.</p>
   </div></div>}
   {ar&&<ARSession product={ar.product} overlay={ar.overlay} sessionP={ar.sessionP} onClose={closeAr} economy={ar.economy} onAdd={id=>change(id,(cart[id]||0)+1)} restaurant={ar.restaurant} onEvent={onEvent}/>}
  </div>

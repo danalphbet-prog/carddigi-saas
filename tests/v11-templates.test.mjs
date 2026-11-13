@@ -25,9 +25,11 @@ test('cinco grupos de tipografia têm títulos, textos e ênfase independentes',
  assert.equal(fontGroupById('luxuoso')?.descriptionItalic,true);
  assert.equal(fontGroupById('não-existe'),null);
 });
-test('regras de restaurante reconhecem tipografia e separação por categoria',()=>{
- const r=rules.rules.restaurants.$rid;
- for(const field of ['menuFontGroup','menuCategoryGroups','menuTemplateId','productDetailTemplateId'])assert.ok(r[field]?.['.validate']);
+test('V13 valida opções tipográficas na API em vez de confiar em escritas diretas',async()=>{
+ const {restaurantFields,validateRestaurantPatch}=await import('../api/lib/validation.js');
+ for(const field of ['menuFontGroup','menuCategoryGroups','menuTemplateId','productDetailTemplateId'])assert.ok(restaurantFields.includes(field));
+ assert.equal(validateRestaurantPatch({menuFontGroup:'moderno'}).menuFontGroup,'moderno');
+ assert.throws(()=>validateRestaurantPatch({menuFontGroup:'invalido'}));
 });
 test('prévia limita a renderização e reutiliza o canvas durante alterações de estado',()=>{
  const s=fs.readFileSync(new URL('../src/ar-viewer.jsx',import.meta.url),'utf8');

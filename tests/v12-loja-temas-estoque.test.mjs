@@ -21,7 +21,7 @@ test('V12: aparência, estabelecimento e contatos compartilham a aba Loja',()=>{
 test('V12: estoque ilimitado remove o saldo anterior do Realtime',()=>{
  const platform=read('platform.jsx');const studio=read('StudioPanel.jsx');
  assert.match(platform,/stock:stockMode==='unlimited'\?null:Number\(fields.stock\)/);
- assert.match(studio,/stock:value,updatedAt:now\(\)/);
+ assert.match(studio,/stock:value,stockRevision:p.stockRevision/);
  assert.match(studio,/value=n===null\?null:Number\(n\)/);
  assert.match(studio,/<option value="unlimited">Ilimitado/);
  assert.match(platform,/setStockMode\(next\)/);

@@ -1,14 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-// Testes de lógica pura extraída em arquivo independente para não depender do SDK no Node.
 import {normalizeOrder} from '../src/ordersCore.js';
-test('normaliza intenção de pedido e calcula total real dos itens',()=>{
- const value=normalizeOrder({customerName:'Ana',notes:'Sem cebola',items:[{name:'Hambúrguer',quantity:2,price:18.9},{name:'Suco',quantity:1,price:7}]});
- assert.equal(value.total,44.8);
- assert.equal(value.customerName,'Ana');
- assert.equal(value.items.length,2);
+test('V13 envia somente produto/quantidade e remove preços falsificados do navegador',()=>{
+  const value=normalizeOrder({requestId:'f6b7462d-d955-44b8-a07f-22f9bac5c76a',customerName:'Ana',notes:'Sem cebola',items:[{productId:'p1',name:'Hambúrguer',quantity:2,price:0.01,total:0.02},{productId:'p2',quantity:1,price:999999}]});
+  assert.deepEqual(value.items,[{productId:'p1',quantity:2},{productId:'p2',quantity:1}]);
+  assert.equal(value.total,undefined);
+  assert.equal(value.customerName,'Ana');
 });
-test('pedido precisa conter produtos e respeitar limite',()=>{
- assert.throws(()=>normalizeOrder({items:[]}),/Carrinho/);
- assert.throws(()=>normalizeOrder({items:[{name:'X',quantity:50,price:99999}]}),/limite/);
+test('V13 valida quantidade inteira, IDs e produtos únicos antes da API',()=>{
+  assert.throws(()=>normalizeOrder({items:[]}),/Carrinho/);
+  assert.throws(()=>normalizeOrder({items:[{productId:'x',quantity:51}]}),/Quantidade/);
+  assert.throws(()=>normalizeOrder({items:[{productId:'x',quantity:2},{productId:'x',quantity:2}]}),/repetido/);
 });

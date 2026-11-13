@@ -22,6 +22,7 @@ export const errText = (e) => {
     'database/permission-denied': 'Você não tem permissão para concluir esta operação.'
   };
   if (messages[code]) return messages[code];
+  if (code.startsWith('api/') && e?.message) return e.message;
   if (code.startsWith('auth/')) return 'Não foi possível entrar. Verifique seus dados ou fale com nosso suporte.';
   if (code.startsWith('database/')) return 'Não foi possível salvar as alterações. Tente novamente.';
   // Erros de validação que são gerados no próprio aplicativo podem ser apresentados.

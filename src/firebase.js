@@ -1,13 +1,15 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { getDatabase, ref, push, set, update, remove, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
+import { getDatabase, ref, get, onValue, query as dbQuery, orderByChild, equalTo, serverTimestamp } from 'firebase/database';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
+import {configureApi,apiMutate} from './api-client.js';
 
 const config={apiKey:import.meta.env.VITE_FIREBASE_API_KEY,authDomain:import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,projectId:import.meta.env.VITE_FIREBASE_PROJECT_ID,appId:import.meta.env.VITE_FIREBASE_APP_ID,databaseURL:import.meta.env.VITE_FIREBASE_DATABASE_URL,messagingSenderId:import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID};
 export const configured=Boolean(config.apiKey && config.authDomain && config.projectId && config.appId && config.databaseURL);
 const app=configured?initializeApp(config):null;
-if(app && import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY)initializeAppCheck(app,{provider:new ReCaptchaEnterpriseProvider(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY),isTokenAutoRefreshEnabled:true});
+const appCheck=app && import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY?initializeAppCheck(app,{provider:new ReCaptchaEnterpriseProvider(import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY),isTokenAutoRefreshEnabled:true}):null;
 export const auth=app?getAuth(app):null;
+configureApi({user:()=>auth?.currentUser,check:appCheck});
 export const db=app?getDatabase(app):null;
 const pathOf=(x)=>x.path;
 const wrap=(path)=>({path,id:path.split('/').pop()});
@@ -26,12 +28,13 @@ const onSnapshot=(source,onNext,onError)=>{
     onNext({id:source.id,exists:()=>s.exists(),data:()=>value,docs});
   },onError);
 };
-const addDoc=async(source,value)=>{const r=push(ref(db,pathOf(source)));await set(r,value);return {id:r.key};};
-const setDoc=async(source,value,opts)=>opts?.merge?update(ref(db,pathOf(source)),value):set(ref(db,pathOf(source)),value);
-const updateDoc=(source,value)=>update(ref(db,pathOf(source)),value);
-const deleteDoc=(source)=>remove(ref(db,pathOf(source)));
+const addDoc=async(source,value)=>apiMutate('add',pathOf(source),value);
+const setDoc=async(source,value,_opts)=>apiMutate('set',pathOf(source),value);
+const updateDoc=async(source,value)=>apiMutate('update',pathOf(source),value);
+const deleteDoc=async(source)=>apiMutate('delete',pathOf(source),null);
 const getDoc=async(source)=>{const s=await get(ref(db,pathOf(source)));return snapshot(source.id,s.val());};
-export const atomicUpdate=(changes)=>update(ref(db),changes);
+// A operação antiga arbitrária foi removida por segurança; use ações administrativas específicas.
+export const atomicUpdate=()=>{throw Error('A operação genérica de escrita foi desativada na V13.');};
 export const store={collection,doc,query,where,addDoc,setDoc,updateDoc,deleteDoc,getDoc,onSnapshot};
 export {onAuthStateChanged,signOut,getRedirectResult};
 export async function loginGoogle(){

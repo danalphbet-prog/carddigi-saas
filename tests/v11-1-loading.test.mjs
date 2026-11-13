@@ -14,7 +14,8 @@ test('preloader aguarda sinal de app pronto e tem recuperação para demora',()=
   assert.match(html,/prefers-reduced-motion/);
 });
 test('menu público aguarda primeira leitura real do banco antes de abrir',()=>{
-  assert.match(platform,/!productsLoaded \|\| !modelsLoaded/);
+  assert.match(platform,/usePublicMenu\(rid\)/);
+  assert.match(platform,/state==='loading'/);
   assert.match(platform,/image\.src=r\.cover/);
   assert.match(platform,/resolved\.loading/);
   assert.match(platform,/window\.dispatchEvent\(new Event\('mezzira:ready'\)\)/);
