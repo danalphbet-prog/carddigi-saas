@@ -1,0 +1,28 @@
+/* Mezzira V13.2: importação / exportação de produtos. */
+.mf-panel{background:#fff;border:1px solid #e1e8d9;border-radius:16px;padding:16px;color:#2e4130;margin:14px 0 20px;min-width:0}
+.mf-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.mf-heading strong{font-weight:800;font-size:14px}
+.mf-heading span{color:#557a46;background:#eaf1df;border-radius:8px;padding:5px 8px;font-size:10px;font-weight:800}
+.mf-panel>p{font-size:12px;line-height:1.5;color:#71836a;margin:6px 0 12px}
+.mf-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}
+.mf-btn{display:inline-flex;min-height:39px;align-items:center;justify-content:center;border:1px solid #cbd9c4;border-radius:10px;padding:8px 12px;background:#f4f7f0;color:#3c593a;font:700 12px 'DM Sans',sans-serif;cursor:pointer}
+.mf-btn:hover{background:#e7f1dd}.mf-btn:disabled{opacity:.5;cursor:wait}
+.mf-btn.mf-confirm{background:#375a36;color:#fff;border-color:#375a36}
+.mf-btn.mf-confirm:hover{background:#244523}
+.mf-panel .mf-help{display:block;margin-top:12px;color:#7a8b72;font-size:11px;line-height:1.5}
+.mf-preview{border:1px solid #d1dfc9;background:#f6fbf2;border-radius:12px;padding:14px;margin:13px 0;color:#284527}
+.mf-preview>b{font-size:13px}.mf-preview small{display:block;color:#738369;font-size:11px;margin:5px 0}
+.mf-preview>p{font-size:12px;color:#51694d}.mf-preview ul{list-style:none;padding:0;margin:9px 0;max-height:215px;overflow:auto}
+.mf-preview li{display:flex;justify-content:space-between;gap:9px;border-bottom:1px solid #e0e9db;padding:8px 0;font-size:12px}
+.mf-preview li small{margin:0;text-align:right}.mf-message,.mf-error{padding:11px;border-radius:10px;font-size:12px;line-height:1.5;margin:10px 0}
+.mf-message{background:#e8f2df;color:#386334}.mf-error{background:#f9e8e7;color:#953c35}
+.p-modal .mf-panel{background:#233326;color:#edf6ea;border-color:#435b45}
+.p-modal .mf-panel>p,.p-modal .mf-help{color:#bbccb5}
+.p-modal .mf-heading span{background:#3b583b;color:#dbf2d2}
+.p-modal .mf-btn:not(.mf-confirm){background:#2d4332;color:#f1f9ee;border-color:#5c7559}
+.p-modal .mf-preview{background:#2d432e;color:#eff9e8;border-color:#627a59}
+.p-modal .mf-preview small,.p-modal .mf-preview>p{color:#c8d9bf}
+.p-modal .mf-preview li{border-color:#50654b}
+@media(max-width:600px){.mf-panel{padding:13px}.mf-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.mf-btn{white-space:normal;text-align:center}.mf-preview li{display:block}.mf-preview li small{text-align:left}}
+
+.mf-export-page{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12px;font-weight:700;margin:12px 0;color:#5b7056}.mf-export-page select{min-height:37px;padding:7px 9px;border-radius:9px;border:1px solid #cbd9c4;background:#fff;color:#2d4731;max-width:100%}

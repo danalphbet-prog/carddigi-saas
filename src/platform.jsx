@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SavorMenu } from './SavorMenu.jsx';
+import { ProductEditorFileTools } from './ProductFileTools.jsx';
 import { StudioPanel } from './StudioPanel.jsx';
 import { MarketingLanding, AuthPage } from './Marketing.jsx';
 import {
@@ -148,6 +149,11 @@ function ProductEditor({rid, product, onClose}) {
   const [stockMode,setStockMode] = useState(()=>Number.isFinite(product?.stock)?'limited':'unlimited');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [ok, setOk] = useState('');
   const set = (key,value) => setFields(f=>({...f,[key]:value}));
+  const importProductFile = value => {
+    setFields(f=>({...f,...value,ingredients:value.ingredients.join('\n'),referencePhotos:[...value.referencePhotos]}));
+    setStockMode(value.stock===null?'unlimited':'limited');
+    setError('');
+  };
   const upload = async (files, isReference = false) => {
     if (!files?.length) return;
     setBusy(true);setError('');
@@ -175,12 +181,13 @@ function ProductEditor({rid, product, onClose}) {
     } catch(e){setError(errText(e));}finally{setBusy(false);}
   };
   return <div className="modal-back" onClick={onClose}><section className="p-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><h2>{product ? 'Editar produto' : 'Adicionar produto'}</h2><button onClick={onClose} aria-label="Fechar">✕</button></div><form onSubmit={save} className="form-grid">
-    <label>Nome do item<input required maxLength={120} value={fields.name} onChange={e=>set('name',e.target.value)} /></label><label>Categoria<input required value={fields.cat} onChange={e=>set('cat',e.target.value)}/></label>
+    <ProductEditorFileTools value={fields} onImport={importProductFile} disabled={busy} />
+    <label>Título do produto<input required maxLength={120} value={fields.name} onChange={e=>set('name',e.target.value)} /></label><label>Categoria<input required value={fields.cat} onChange={e=>set('cat',e.target.value)}/></label>
     <label className="span-2">Descrição<textarea rows={3} value={fields.description} onChange={e=>set('description',e.target.value)} /></label>
     <label>Preço (R$)<input type="number" min="0" max="100000" step="0.01" value={fields.price} onChange={e=>set('price',e.target.value)}/></label><div className="stock-editor-field"><label>Controle de estoque<select value={stockMode} onChange={e=>{const next=e.target.value;setStockMode(next);set('stock',next==='unlimited'?null:0)}}><option value="unlimited">Ilimitado (sem controle de saldo)</option><option value="limited">Limitado por quantidade</option></select></label>{stockMode==='limited'&&<label>Saldo disponível<input type="number" min="0" max="1000000" step="1" value={fields.stock??''} onChange={e=>set('stock',e.target.value)}/></label>}</div><label>Calorias<input type="number" min="0" value={fields.kcal} onChange={e=>set('kcal',e.target.value)}/></label>
     <label>Diâmetro real estimado (metros)<input type="number" min="0.05" max="2" step="0.01" value={fields.diameter} onChange={e=>set('diameter',e.target.value)}/></label><label>Emoji do prato<input maxLength={10} value={fields.emoji} onChange={e=>set('emoji',e.target.value)}/></label>
     <label className="span-2">Ingredientes (um por linha)<textarea rows={3} value={fields.ingredients} onChange={e=>set('ingredients',e.target.value)}/></label>
-    <label className="span-2">Mensagem de convite em AR<input maxLength={200} value={fields.prompt} onChange={e=>set('prompt',e.target.value)}/></label>
+    <label className="span-2">Mensagem ao aproximar do prato (AR)<input maxLength={200} value={fields.prompt} onChange={e=>set('prompt',e.target.value)}/></label>
     <label>Foto principal do produto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files)}/></label><label>Fotos para solicitar modelo 3D (até 5)<input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e=>upload(e.target.files, true)}/></label>
     {fields.photo && <img className="preview-pic" src={fields.photo} alt="Foto principal"/>}{fields.referencePhotos.length>0 && <div className="ref-photos">{fields.referencePhotos.map((url,i)=><div key={url}><img src={url} alt={`Referência ${i+1}`}/><button type="button" onClick={()=>set('referencePhotos',fields.referencePhotos.filter(x=>x!==url))}>Remover</button></div>)}</div>}
     <label className="span-2">Modelo 3D disponível no catálogo<select value={fields.modelId||''} onChange={e=>set('modelId',e.target.value)}><option value="">Nenhum modelo — solicitar produção</option>{models.filter(m=>m.active).map(m=><option key={m.id} value={m.id}>{m.name} · {m.category||'Geral'}</option>)}</select></label>

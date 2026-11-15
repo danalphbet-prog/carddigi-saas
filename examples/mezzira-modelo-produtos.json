@@ -1,0 +1,28 @@
+{
+  "schema": "mezzira.products",
+  "version": 1,
+  "products": [
+    {
+      "name": "Pizza Margherita",
+      "description": "Massa artesanal, molho de tomate, mussarela e manjericão.",
+      "cat": "Pizzas",
+      "price": 49.9,
+      "prompt": "Quer adicionar esta pizza ao pedido?",
+      "photo": "",
+      "referencePhotos": [],
+      "ingredients": [
+        "Massa artesanal",
+        "Molho de tomate",
+        "Mussarela",
+        "Manjericão"
+      ],
+      "kcal": 720,
+      "diameter": 0.3,
+      "roughness": 0.76,
+      "emoji": "🍕",
+      "stock": null,
+      "active": true,
+      "modelId": ""
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mezzira version="1">
+  <products>
+    <product>
+      <name>Pizza Margherita</name>
+      <description>Massa artesanal, molho de tomate, mussarela e manjericão.</description>
+      <cat>Pizzas</cat>
+      <price>49.9</price>
+      <prompt>Quer adicionar esta pizza ao pedido?</prompt>
+      <photo></photo>
+      <referencePhotos>
+      </referencePhotos>
+      <ingredients>
+        <item>Massa artesanal</item>
+        <item>Molho de tomate</item>
+        <item>Mussarela</item>
+        <item>Manjericão</item>
+      </ingredients>
+      <kcal>720</kcal>
+      <diameter>0.3</diameter>
+      <roughness>0.76</roughness>
+      <emoji>🍕</emoji>
+      <stock></stock>
+      <active>true</active>
+      <modelId></modelId>
+    </product>
+  </products>
+</mezzira>
