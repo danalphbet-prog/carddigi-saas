@@ -293,3 +293,48 @@
   }
 }
 /* MEZZIRA HERO PATCH V13.2 - FIM */
+
+/* MEZZIRA HERO V13.3 FINAL */
+
+.savor-client .sm-home-hero {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  margin-left: calc(50% - 50vw) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+.savor-client .sm-hero-image {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Remover fundo e contorno do nome */
+.savor-client .sm-wordmark > span:last-child,
+.savor-client .sm-hero-copy > h1 {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin-left: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: white !important;
+  text-shadow:
+    0 2px 4px rgba(0,0,0,.95),
+    0 5px 14px rgba(0,0,0,.8),
+    0 0 3px rgba(0,0,0,.65) !important;
+}
+
+@media (max-width: 600px) {
+  .savor-client .sm-hero-image {
+    transform: scale(1.8) !important;
+  }
+}
