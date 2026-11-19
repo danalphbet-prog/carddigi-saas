@@ -176,7 +176,7 @@ function ProductEditor({rid, product, onClose}) {
       if(stockMode==='limited'&&(fields.stock===''||!Number.isInteger(Number(fields.stock))||Number(fields.stock)<0||Number(fields.stock)>1000000))throw Error('Informe um saldo inteiro entre 0 e 1.000.000 ou selecione Ilimitado.');
       const obj = {name:fields.name.trim().slice(0,120),description:fields.description.trim().slice(0,1200),cat:slug(fields.cat).slice(0,70)||'Outros',price,kcal:Math.max(0,Number(fields.kcal)||0),diameter,roughness:Math.min(1,Math.max(0,Number(fields.roughness)||.75)), ingredients:fields.ingredients.split('\n').map(s=>s.trim()).filter(Boolean).slice(0,25),emoji:fields.emoji.trim().slice(0,10),prompt:fields.prompt.trim().slice(0,200),photo:fields.photo||'',referencePhotos:fields.referencePhotos.slice(0,MAX_REFERENCE_PHOTOS),active:!!fields.active,stock:stockMode==='unlimited'?null:Number(fields.stock),modelId:fields.modelId || '',stockRevision:fields.stockRevision??0,updatedAt:now()};
       if(product?.id) await updateDoc(productDoc(rid, product.id), obj);
-      else await addDoc(productCollection(rid), {...obj,modelStatus:'none',createdAt:now()});
+      else await addDoc(productCollection(rid), {...obj,createdAt:now()});
       onClose();
     } catch(e){setError(errText(e));}finally{setBusy(false);}
   };
