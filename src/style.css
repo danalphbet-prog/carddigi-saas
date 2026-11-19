@@ -164,3 +164,20 @@ svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .ar-transition-mark span:last-child {inset:12px;border-width:2px;border-top-color:#fff;animation-direction:reverse;animation-duration:1.7s}
 @keyframes mezzira-ar-spin {to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.ar-transition,.ar-transition-mark span {animation:none!important;transition:none!important}}
+
+
+/* Mezzira AR: sacola no canto superior direito. */
+.ar-top{z-index:20}
+.ar-top .ar-cart-trigger{
+  position:relative;display:grid;place-items:center;flex:0 0 46px;
+  width:46px;height:46px;margin-left:auto;border-radius:50%;
+  border:1px solid rgba(255,255,255,.4);
+  background:rgba(12,21,15,.65);color:#fff;
+  box-shadow:0 5px 18px rgba(0,0,0,.25);cursor:pointer;
+}
+.ar-top .ar-cart-trigger .ar-cart-count{
+  position:absolute;right:-5px;top:-6px;min-width:20px;height:20px;
+  padding:0 5px;display:grid;place-items:center;border-radius:999px;
+  background:#c6e47b;color:#14210e;font:800 11px/1 system-ui,sans-serif;
+  opacity:1;
+}

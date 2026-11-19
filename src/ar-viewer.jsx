@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ShoppingBag } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { XREstimatedLight } from 'three/addons/webxr/XREstimatedLight.js';
@@ -131,7 +132,7 @@ function Viewer({ product, onError }) {
 }
 
 // A sessão WebXR é pedida no clique (gesto do usuário). O overlay DOM é criado antes disso.
-function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restaurant, onEvent=()=>{} }) {
+function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, onOpenCart, cartCount=0, restaurant, onEvent=()=>{} }) {
   const hostRef = useRef(null);
   const actions = useRef({});
   const [light, setLight] = useState('Luz padrão');
@@ -228,7 +229,7 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
       say('A câmera está demorando a abrir. Você pode tocar em Voltar e tentar novamente.');
     }, 12000);
     const beforeXRSelect = event => {
-      if (event.target?.closest?.('button,a,input')) event.preventDefault();
+      if (event.target?.closest?.('button,a,input,textarea,select,[role="dialog"],.sm-cart-overlay')) event.preventDefault();
     };
     overlay.addEventListener('beforexrselect', beforeXRSelect);
 
@@ -448,6 +449,10 @@ function ARSession({ product, overlay, sessionP, onClose, economy, onAdd, restau
     <div className="ar-top">
       <button className="ghost" onClick={() => actions.current.exit?.()} aria-label="Fechar AR">Voltar</button>
       <div><strong>{product.name}</strong><span>{light}</span></div>
+      <button type="button" className="ar-cart-trigger" onClick={() => { setAsk(false); onOpenCart?.(); }} aria-label={`Abrir carrinho, ${cartCount} itens`} title="Abrir carrinho">
+        <ShoppingBag size={22} aria-hidden="true"/>
+        {cartCount > 0 && <span className="ar-cart-count">{cartCount}</span>}
+      </button>
     </div>
     <div className="ar-bottom">
       <p aria-live="polite">{status}</p>
