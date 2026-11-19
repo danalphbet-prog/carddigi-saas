@@ -159,3 +159,137 @@
 .sm-checkout-rotate{flex-shrink:0;animation:smCheckoutSpin 1.2s linear infinite}
 @keyframes smCheckoutSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.sm-checkout-rotate{animation:none}}
+
+/* MEZZIRA HERO PATCH V13.2 - INICIO */
+/*
+ * O hero usa imagem em cover com 2% de sangria para eliminar filetes
+ * nas bordas; preserva object-position inline (coverX/coverY).
+ * Aplica-se a todos os cardápios que utilizam SavorMenu.
+ */
+.savor-client {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.savor-client .sm-home-hero {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background-color: var(--sm-hero-base);
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  background-position: center;
+}
+/* Preenchimento real em qualquer proporção de tela: nunca usar contain. */
+.savor-client .sm-home-hero > .sm-hero-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  object-fit: cover !important;
+  /* object-position continua vindo da configuração de capa. */
+  transform: scale(1.02);
+  transform-origin: center;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+/* Contraste uniforme: cabeçalho legível e parte inferior com profundidade. */
+.savor-client .sm-home-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(8, 13, 10, .28) 0%, transparent 68%),
+    linear-gradient(180deg,
+      rgba(8, 13, 10, .50) 0%,
+      rgba(8, 13, 10, .12) 34%,
+      rgba(8, 13, 10, .33) 64%,
+      rgba(8, 13, 10, .82) 100%);
+}
+.savor-client .sm-home-top,
+.savor-client .sm-hero-copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+.savor-client .sm-home-top .sm-wordmark {
+  min-width: 0;
+}
+.savor-client .sm-home-top .sm-top-btns {
+  flex-shrink: 0;
+}
+/* Nome pequeno no topo — fundo de contraste sem ocultar a foto. */
+.savor-client .sm-home-top .sm-wordmark > span:last-child {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #fff !important;
+  padding: .19em .48em .25em;
+  border-radius: 10px;
+  background: linear-gradient(90deg,
+    rgba(7, 12, 9, .70),
+    rgba(7, 12, 9, .38));
+  text-shadow: 0 2px 5px rgba(0,0,0,.9),
+               0 5px 17px rgba(0,0,0,.65);
+  box-shadow: 0 5px 18px rgba(0,0,0,.12);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+/* Título principal — protege texto branco sobre fotos brancas. */
+.savor-client .sm-hero-copy > h1 {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: .11em .24em .15em;
+  margin-left: -.24em;
+  color: #fff !important;
+  overflow-wrap: anywhere;
+  border-radius: 12px;
+  background: linear-gradient(90deg,
+    rgba(7, 12, 9, .75) 0%,
+    rgba(7, 12, 9, .46) 76%,
+    rgba(7, 12, 9, .20) 100%);
+  text-shadow: 0 2px 5px rgba(0,0,0,.95),
+               0 8px 25px rgba(0,0,0,.72);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.savor-client .sm-hero-copy > p,
+.savor-client .sm-hero-copy > .sm-eyebrow {
+  color: #fff !important;
+  text-shadow: 0 2px 5px rgba(0,0,0,.94),
+               0 5px 16px rgba(0,0,0,.63);
+}
+@media (max-width: 600px) {
+  .savor-client .sm-home-hero {
+    width: 100%;
+    min-width: 0;
+  }
+  .savor-client .sm-home-top .sm-wordmark {
+    font-size: clamp(16px, 4.4vw, 23px);
+  }
+  .savor-client .sm-hero-copy > h1 {
+    max-width: 100%;
+    font-size: clamp(32px, 10vw, 43px);
+    margin-left: -.12em;
+    padding-left: .12em;
+    padding-right: .12em;
+  }
+}
+/* MEZZIRA HERO PATCH V13.2 - FIM */
